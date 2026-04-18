@@ -33,10 +33,19 @@ class QccApiService {
     console.log(`[QCC API] 请求 ${serverType}: ${query}`)
     console.log(`[QCC API] URL: ${url}`)
 
-    // 构建 JSON-RPC 2.0 格式请求
+    // 企查查MCP API 使用 JSON-RPC 2.0 格式
+    // method 字段可能是具体的工具名称
+    const methodMap = {
+      company: 'getCompanyInfo',
+      risk: 'getRiskInfo',
+      ipr: 'getIPRInfo',
+      operation: 'getOperationInfo',
+    }
+
     const jsonrpcRequest = {
       jsonrpc: '2.0',
       id: 1,
+      method: methodMap[serverType] || 'query',
       params: {
         query: query,
       },
