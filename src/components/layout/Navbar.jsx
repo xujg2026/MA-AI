@@ -13,6 +13,7 @@ export default function Navbar() {
     { name: 'AI觅售', href: '/ai-finder' },
     { name: '信息录入', href: '/prospect-entry' },
     { name: 'AI交易', href: '/buyer-matching' },
+    { name: 'AI尽职调查', href: '/ai-due-diligence' },
     { name: '案例库', href: '/deals', desc: '既往交易' },
     { name: '数据管理', href: '/data-management' },
     { name: '并购资讯', href: '/news' },

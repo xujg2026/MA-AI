@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ddChecklist } from '../../data/mockData'
+import { getQccApi, setQccApiKey } from '../../services/qccApi'
 import {
   FileText,
   CheckCircle,
@@ -13,8 +14,17 @@ import {
   TrendingUp,
   AlertCircle,
   Eye,
+  Loader2,
+  Building2,
+  User,
+  DollarSign,
+  Calendar,
+  MapPin,
 } from 'lucide-react'
 import { Card, Button, Badge } from '../ui'
+
+// 企查查 API Key
+const QCC_API_KEY = 'MohHnWYT7LapgQkP1OGpVHpyS1gLZo2kMkgjvNZoTj5QcvS7'
 
 // Risk items that trigger red flag warnings
 const riskIndicators = [
@@ -26,7 +36,7 @@ const riskIndicators = [
   { id: 'pending_litigation', label: '待决诉讼金额', threshold: 1000, unit: '万', level: 'medium' },
 ]
 
-// Simulated risk analysis data
+// 模拟风险分析数据（当API不可用时使用）
 const riskAnalysisData = {
   overall: 72,
   financial: { score: 75, risks: ['应收账款周转率下降', '存货占比偏高'] },
@@ -52,6 +62,8 @@ export default function AIDueDiligence({ onComplete }) {
   const [selectedCompany, setSelectedCompany] = useState('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState(null)
+  const [companyInfo, setCompanyInfo] = useState(null)
+  const [qccError, setQccError] = useState(null)
 
   const toggleSection = (section) => {
     setExpandedSections((prev) =>
@@ -96,13 +108,120 @@ export default function AIDueDiligence({ onComplete }) {
   const overall = getOverallProgress()
   const progressPercent = overall.total > 0 ? Math.round((overall.checked / overall.total) * 100) : 0
 
-  // Simulate AI risk analysis
-  const runRiskAnalysis = () => {
+  // 使用企查查API进行风险分析
+  const runRiskAnalysis = async () => {
+    if (!selectedCompany.trim()) return
+
     setIsAnalyzing(true)
-    setTimeout(() => {
+    setQccError(null)
+    setCompanyInfo(null)
+
+    try {
+      // 设置API Key
+      setQccApiKey(QCC_API_KEY)
+      const qccApi = getQccApi()
+
+      if (!qccApi) {
+        throw new Error('企查查API服务初始化失败')
+      }
+
+      // 并行获取公司信息和风险数据
+      const [companyData, riskData] = await Promise.all([
+        qccApi.getCompanyInfo(selectedCompany),
+        qccApi.getRiskInfo(selectedCompany),
+      ])
+
+      // 处理公司基本信息
+      let basicInfo = null
+      if (!companyData.error && companyData) {
+        const data = Array.isArray(companyData) ? companyData[0] : companyData
+        basicInfo = {
+          name: data.Name || selectedCompany,
+          creditCode: data.CreditCode || '-',
+          legalPerson: data.LegalPersonName || '-',
+          registeredCapital: data.RegistCapi || '-',
+          paidCapital: data.RecCap || '-',
+          status: data.Status || '-',
+          startDate: data.StartDate || '-',
+          companyType: data.EconKind || '-',
+          scope: data.Scope || '-',
+          address: data.Address || '-',
+        }
+        setCompanyInfo(basicInfo)
+      }
+
+      // 处理风险数据
+      if (!riskData.error && riskData) {
+        const data = typeof riskData === 'string' ? JSON.parse(riskData) : riskData
+
+        // 提取风险计数
+        const criticalRisks = []
+        const highRisks = []
+
+        // 关键风险
+        if (data.dishonest && data.dishonest > 0) criticalRisks.push({ type: '失信记录', count: data.dishonest })
+        if (data.executed && data.executed > 0) criticalRisks.push({ type: '被执行', count: data.executed })
+        if (data.bankruptcy && data.bankruptcy > 0) criticalRisks.push({ type: '破产记录', count: data.bankruptcy })
+        if (data.equityFreeze && data.equityFreeze > 0) criticalRisks.push({ type: '股权冻结', count: data.equityFreeze })
+
+        // 高风险
+        if (data.businessException && data.businessException > 0) highRisks.push({ type: '经营异常', count: data.businessException })
+        if (data.seriousViolation && data.seriousViolation > 0) highRisks.push({ type: '严重违法', count: data.seriousViolation })
+        if (data.administrativePenalty && data.administrativePenalty > 0) highRisks.push({ type: '行政处罚', count: data.administrativePenalty })
+
+        const totalCritical = criticalRisks.length
+        const totalHigh = highRisks.length
+        const totalRisk = totalCritical + totalHigh
+
+        // 计算综合风险指数
+        let overall = 85 // 基础分
+        if (totalCritical > 0) overall -= totalCritical * 15
+        if (totalHigh > 0) overall -= totalHigh * 8
+        overall = Math.max(0, Math.min(100, overall))
+
+        // 生成风险分析结果
+        const riskResult = {
+          overall,
+          financial: {
+            score: overall + 5,
+            risks: data.financialRisks || ['需结合财务报表分析']
+          },
+          legal: {
+            score: overall - 5,
+            risks: [...criticalRisks.map(r => r.type), ...highRisks.map(r => r.type)]
+          },
+          business: {
+            score: overall + 3,
+            risks: ['需结合业务尽调分析']
+          },
+          compliance: {
+            score: overall + 8,
+            risks: totalCritical === 0 && totalHigh === 0 ? ['未发现明显合规问题'] : []
+          },
+          // 额外的企查查数据
+          qccData: {
+            criticalRisks,
+            highRisks,
+            totalLawsuits: data.lawsuits || 0,
+            totalPenalties: data.administrativePenalty || 0,
+            businessExceptions: data.businessException || 0,
+          }
+        }
+
+        setAnalysisResult(riskResult)
+      } else {
+        // API调用失败，使用模拟数据
+        setQccError(riskData.error || '获取风险数据失败，使用本地数据')
+        setAnalysisResult(riskAnalysisData)
+      }
+    } catch (error) {
+      console.error('企查查API调用失败:', error)
+      setQccError(`API调用失败: ${error.message}，使用本地数据`)
+      // 使用模拟数据作为后备
       setAnalysisResult(riskAnalysisData)
-      setIsAnalyzing(false)
-    }, 2000)
+    }
+
+    setIsAnalyzing(false)
   }
 
   const getRiskStatusColor = (status) => {
@@ -151,9 +270,10 @@ export default function AIDueDiligence({ onComplete }) {
         <Card.Title className="flex items-center mb-4">
           <Shield size={24} className="mr-2 text-primary" />
           AI风险扫描
+          <Badge variant="info" className="ml-2">企查查实时数据</Badge>
         </Card.Title>
         <p className="text-sm text-gray-500 mb-4">
-          基于NLP技术自动分析财报、合同、诉讼、税务等文档，识别潜在风险点
+          基于企查查实时数据自动分析公司工商信息、风险记录、司法诉讼等，识别潜在风险点
         </p>
 
         <div className="grid lg:grid-cols-2 gap-6">
@@ -173,13 +293,78 @@ export default function AIDueDiligence({ onComplete }) {
             </div>
             <Button
               variant="primary"
-              icon={Eye}
+              icon={isAnalyzing ? Loader2 : Eye}
               onClick={runRiskAnalysis}
               disabled={!selectedCompany || isAnalyzing}
             >
-              {isAnalyzing ? 'AI正在扫描风险...' : '启动AI风险扫描'}
+              {isAnalyzing ? (
+                <>
+                  <Loader2 size={18} className="animate-spin mr-2" />
+                  AI正在扫描风险...
+                </>
+              ) : (
+                '启动AI风险扫描'
+              )}
             </Button>
+            {qccError && (
+              <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded-lg">
+                {qccError}
+              </p>
+            )}
           </div>
+
+          {/* Company Info Display */}
+          {companyInfo && (
+            <div className="space-y-3">
+              <h4 className="font-semibold text-gray-900 flex items-center">
+                <Building2 size={16} className="mr-2 text-primary" />
+                企业工商信息
+              </h4>
+              <div className="bg-white rounded-xl p-4 space-y-2 text-sm">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex items-center text-gray-500">
+                    <User size={14} className="mr-1" />
+                    法定代表人
+                  </div>
+                  <div className="text-gray-900 font-medium">{companyInfo.legalPerson}</div>
+
+                  <div className="flex items-center text-gray-500">
+                    <DollarSign size={14} className="mr-1" />
+                    注册资本
+                  </div>
+                  <div className="text-gray-900">{companyInfo.registeredCapital}</div>
+
+                  <div className="flex items-center text-gray-500">
+                    <Calendar size={14} className="mr-1" />
+                    成立日期
+                  </div>
+                  <div className="text-gray-900">{companyInfo.startDate}</div>
+
+                  <div className="flex items-center text-gray-500">
+                    <TrendingUp size={14} className="mr-1" />
+                    经营状态
+                  </div>
+                  <div className="text-gray-900">
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                      companyInfo.status === '存续' || companyInfo.status === '在业'
+                        ? 'bg-green-100 text-green-700'
+                        : companyInfo.status === '吊销' || companyInfo.status === '注销'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {companyInfo.status}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center text-gray-500">
+                    <MapPin size={14} className="mr-1" />
+                    注册地址
+                  </div>
+                  <div className="text-gray-900 text-xs truncate">{companyInfo.address || '-'}</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Risk Heat Map */}
           {analysisResult && (
@@ -224,31 +409,64 @@ export default function AIDueDiligence({ onComplete }) {
             <h4 className="font-semibold text-gray-900 mb-4 flex items-center">
               <AlertTriangle size={18} className="mr-2 text-red-500" />
               红线预警（需重点关注）
+              {analysisResult.qccData && (
+                <Badge variant="info" className="ml-2 text-xs">企查查数据</Badge>
+              )}
             </h4>
             <div className="grid md:grid-cols-3 gap-4">
-              <div className="p-4 bg-red-50 rounded-xl border border-red-200">
-                <div className="flex items-center space-x-2 mb-2">
-                  <AlertCircle size={16} className="text-red-600" />
-                  <span className="font-medium text-red-700">股权质押比例</span>
+              {analysisResult.qccData?.criticalRisks?.length > 0 ? (
+                analysisResult.qccData.criticalRisks.map((risk, idx) => (
+                  <div key={idx} className="p-4 bg-red-50 rounded-xl border border-red-200">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <AlertCircle size={16} className="text-red-600" />
+                      <span className="font-medium text-red-700">{risk.type}</span>
+                    </div>
+                    <p className="text-2xl font-bold text-red-600">{risk.count}条</p>
+                    <p className="text-xs text-red-600/70 mt-1">存在{risk.type}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="p-4 bg-green-50 rounded-xl border border-green-200">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <CheckCircle size={16} className="text-green-600" />
+                    <span className="font-medium text-green-700">关键风险</span>
+                  </div>
+                  <p className="text-2xl font-bold text-green-600">0</p>
+                  <p className="text-xs text-green-600/70 mt-1">未发现关键风险</p>
                 </div>
-                <p className="text-2xl font-bold text-red-600">72%</p>
-                <p className="text-xs text-red-600/70 mt-1">超过70%预警线</p>
-              </div>
-              <div className="p-4 bg-yellow-50 rounded-xl border border-yellow-200">
-                <div className="flex items-center space-x-2 mb-2">
-                  <AlertCircle size={16} className="text-yellow-600" />
-                  <span className="font-medium text-yellow-700">商誉占比</span>
+              )}
+
+              {analysisResult.qccData?.highRisks?.length > 0 ? (
+                analysisResult.qccData.highRisks.map((risk, idx) => (
+                  <div key={idx} className="p-4 bg-yellow-50 rounded-xl border border-yellow-200">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <AlertCircle size={16} className="text-yellow-600" />
+                      <span className="font-medium text-yellow-700">{risk.type}</span>
+                    </div>
+                    <p className="text-2xl font-bold text-yellow-600">{risk.count}条</p>
+                    <p className="text-xs text-yellow-600/70 mt-1">存在{risk.type}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="p-4 bg-green-50 rounded-xl border border-green-200">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <CheckCircle size={16} className="text-green-600" />
+                    <span className="font-medium text-green-700">高风险项</span>
+                  </div>
+                  <p className="text-2xl font-bold text-green-600">0</p>
+                  <p className="text-xs text-green-600/70 mt-1">未发现高风险</p>
                 </div>
-                <p className="text-2xl font-bold text-yellow-600">35%</p>
-                <p className="text-xs text-yellow-600/70 mt-1">接近40%预警线</p>
-              </div>
-              <div className="p-4 bg-green-50 rounded-xl border border-green-200">
+              )}
+
+              <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
                 <div className="flex items-center space-x-2 mb-2">
-                  <CheckCircle size={16} className="text-green-600" />
-                  <span className="font-medium text-green-700">连续亏损</span>
+                  <FileText size={16} className="text-blue-600" />
+                  <span className="font-medium text-blue-700">综合风险指数</span>
                 </div>
-                <p className="text-2xl font-bold text-green-600">0年</p>
-                <p className="text-xs text-green-600/70 mt-1">经营正常</p>
+                <p className="text-2xl font-bold text-blue-600">{analysisResult.overall}</p>
+                <p className="text-xs text-blue-600/70 mt-1">
+                  {analysisResult.overall >= 70 ? '风险较低' : analysisResult.overall >= 50 ? '存在一定风险' : '风险较高'}
+                </p>
               </div>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { generateSampleReportData, ddReportStructure } from '../../data/ddReportTemplate'
+import { getQccApi, setQccApiKey } from '../../services/qccApi'
 import {
   FileText,
   Download,
@@ -16,7 +17,11 @@ import {
   CheckCircle,
   AlertTriangle,
   Sparkles,
+  Shield,
 } from 'lucide-react'
+
+// 企查查 API Key
+const QCC_API_KEY = 'MohHnWYT7LapgQkP1OGpVHpyS1gLZo2kMkgjvNZoTj5QcvS7'
 
 export default function DDReportGenerator({ onComplete }) {
   const [companyName, setCompanyName] = useState('')
@@ -24,18 +29,52 @@ export default function DDReportGenerator({ onComplete }) {
   const [reportData, setReportData] = useState(null)
   const [activeTab, setActiveTab] = useState('input') // input, preview
   const [expandedSections, setExpandedSections] = useState({})
+  const [qccData, setQccData] = useState(null)
+  const [qccError, setQccError] = useState(null)
+  const [generatingStep, setGeneratingStep] = useState('')
   const reportRef = useRef(null)
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!companyName.trim()) return
 
     setIsGenerating(true)
+    setQccError(null)
+    setQccData(null)
+    setGeneratingStep('正在连接企查查数据平台...')
 
-    // 模拟AI生成过程
-    setTimeout(() => {
-      const data = generateSampleReportData(companyName)
+    try {
+      // 设置API Key并获取API实例
+      setQccApiKey(QCC_API_KEY)
+      const qccApi = getQccApi()
+
+      if (!qccApi) {
+        throw new Error('企查查API服务初始化失败')
+      }
+
+      // 并行获取所有企查查数据
+      setGeneratingStep('正在获取企业工商信息...')
+      const [companyInfo, riskInfo, iprInfo, operationInfo] = await Promise.all([
+        qccApi.getCompanyInfo(companyName),
+        qccApi.getRiskInfo(companyName),
+        qccApi.getIPRInfo(companyName),
+        qccApi.getOperationInfo(companyName),
+      ])
+
+      // 处理并整合数据
+      setGeneratingStep('正在处理企业数据...')
+      const processedData = processQccData({
+        companyInfo,
+        riskInfo,
+        iprInfo,
+        operationInfo,
+      })
+
+      setQccData(processedData)
+
+      // 生成推荐书数据
+      setGeneratingStep('正在生成推荐书...')
+      const data = generateReportWithQccData(companyName, processedData)
       setReportData(data)
-      setIsGenerating(false)
       setActiveTab('preview')
 
       // 默认展开所有部分
@@ -44,7 +83,185 @@ export default function DDReportGenerator({ onComplete }) {
         allExpanded[section.id] = true
       })
       setExpandedSections(allExpanded)
-    }, 2000)
+
+    } catch (error) {
+      console.error('生成推荐书失败:', error)
+      setQccError(`生成失败: ${error.message}`)
+
+      // 使用模拟数据作为后备
+      setTimeout(() => {
+        const data = generateSampleReportData(companyName)
+        setReportData(data)
+        setActiveTab('preview')
+
+        const allExpanded = {}
+        ddReportStructure.sections.forEach((section) => {
+          allExpanded[section.id] = true
+        })
+        setExpandedSections(allExpanded)
+      }, 500)
+    }
+
+    setIsGenerating(false)
+    setGeneratingStep('')
+  }
+
+  // 处理企查查返回的数据
+  const processQccData = (qccResult) => {
+    const { companyInfo, riskInfo, iprInfo, operationInfo } = qccResult
+
+    // 处理公司基本信息
+    let basicInfo = {}
+    if (!companyInfo.error && companyInfo) {
+      const data = Array.isArray(companyInfo) ? companyInfo[0] : companyInfo
+      basicInfo = {
+        name: data.Name || companyName,
+        creditCode: data.CreditCode || '-',
+        legalPerson: data.LegalPersonName || '-',
+        registeredCapital: data.RegistCapi || '-',
+        paidCapital: data.RecCap || '-',
+        status: data.Status || '-',
+        startDate: data.StartDate || '-',
+        companyType: data.EconKind || '-',
+        scope: data.Scope || '-',
+        address: data.Address || '-',
+        businessDuration: data.BusinessDuration || '-',
+        employees: data.EmpNum || '-',
+      }
+    }
+
+    // 处理风险数据
+    let riskSummary = {
+      critical: [],
+      high: [],
+      medium: [],
+      low: [],
+      totalScore: 100,
+    }
+    if (!riskInfo.error && riskInfo) {
+      const data = typeof riskInfo === 'string' ? JSON.parse(riskInfo) : riskInfo
+
+      if (data.dishonest && data.dishonest > 0) riskSummary.critical.push({ type: '失信记录', count: data.dishonest })
+      if (data.executed && data.executed > 0) riskSummary.critical.push({ type: '被执行', count: data.executed })
+      if (data.bankruptcy && data.bankruptcy > 0) riskSummary.critical.push({ type: '破产记录', count: data.bankruptcy })
+      if (data.equityFreeze && data.equityFreeze > 0) riskSummary.critical.push({ type: '股权冻结', count: data.equityFreeze })
+
+      if (data.businessException && data.businessException > 0) riskSummary.high.push({ type: '经营异常', count: data.businessException })
+      if (data.seriousViolation && data.seriousViolation > 0) riskSummary.high.push({ type: '严重违法', count: data.seriousViolation })
+      if (data.administrativePenalty && data.administrativePenalty > 0) riskSummary.high.push({ type: '行政处罚', count: data.administrativePenalty })
+
+      // 计算风险分数
+      let score = 100
+      score -= riskSummary.critical.length * 20
+      score -= riskSummary.high.length * 10
+      riskSummary.totalScore = Math.max(0, score)
+    }
+
+    // 处理知识产权数据
+    let ipData = {
+      patents: 0,
+      trademarks: 0,
+      softwareCopyrights: 0,
+      workCopyrights: 0,
+      patentList: [],
+      trademarkList: [],
+    }
+    if (!iprInfo.error && iprInfo) {
+      const data = typeof iprInfo === 'string' ? JSON.parse(iprInfo) : iprInfo
+      if (Array.isArray(data.patents)) {
+        ipData.patents = data.patents.length
+        ipData.patentList = data.patents.slice(0, 5).map(p => p.Title || p.name || '未知专利')
+      }
+      if (Array.isArray(data.trademarks)) {
+        ipData.trademarks = data.trademarks.length
+        ipData.trademarkList = data.trademarks.slice(0, 5).map(t => t.Name || t.name || '未知商标')
+      }
+      if (Array.isArray(data.softwareCopyrights)) {
+        ipData.softwareCopyrights = data.softwareCopyrights.length
+      }
+      if (Array.isArray(data.workCopyrights)) {
+        ipData.workCopyrights = data.workCopyrights.length
+      }
+    }
+
+    // 处理经营数据
+    let operationData = {
+      biddingCount: 0,
+      qualifications: [],
+      newsCount: 0,
+    }
+    if (!operationInfo.error && operationInfo) {
+      const data = typeof operationInfo === 'string' ? JSON.parse(operationInfo) : operationInfo
+      if (Array.isArray(data.bidding)) {
+        operationData.biddingCount = data.bidding.length
+      }
+      if (Array.isArray(data.qualifications)) {
+        operationData.qualifications = data.qualifications.slice(0, 5)
+      }
+      operationData.newsCount = data.newsCount || 0
+    }
+
+    return {
+      basicInfo,
+      riskSummary,
+      ipData,
+      operationData,
+    }
+  }
+
+  // 生成包含企查查数据的报告
+  const generateReportWithQccData = (companyName, qccData) => {
+    const { basicInfo, riskSummary, ipData, operationData } = qccData
+
+    // 计算投资风险等级
+    let riskLevel = '低风险'
+    let riskLevelColor = 'green'
+    if (riskSummary.critical.length > 0) {
+      riskLevel = '高风险'
+      riskLevelColor = 'red'
+    } else if (riskSummary.high.length > 0) {
+      riskLevel = '中等风险'
+      riskLevelColor = 'yellow'
+    }
+
+    // 生成执行摘要
+    const executiveSummary = {
+      companyProfile: `该公司成立于${basicInfo.startDate || '未知'}，注册资本${basicInfo.registeredCapital || '未知'}，法定代表人为${basicInfo.legalPerson || '未知'}。`,
+      businessIntro: `企业经营范围：${basicInfo.scope || '暂无详细信息'}。公司目前处于${basicInfo.status || '未知'}状态。`,
+      financialSummary: `根据企查查数据显示，公司注册资本${basicInfo.registeredCapital || '未知'}，实缴资本${basicInfo.paidCapital || '未知'}。`,
+      ipoStatus: `公司当前经营状态：${basicInfo.status || '未知'}。`,
+      investmentPlan: `建议投资金额根据公司估值及财务状况综合确定。`,
+      investmentReturn: `预期收益取决于公司成长性及行业前景。`,
+      investmentValue: `公司拥有${ipData.patents}项专利、${ipData.trademarks}项商标，知识产权积累良好。`,
+      investmentRisk: `风险评估：${riskLevel}。关键风险${riskSummary.critical.length}项，高风险${riskSummary.high.length}项。`,
+    }
+
+    return {
+      companyInfo: {
+        name: basicInfo.name || companyName,
+        legalRepresentative: basicInfo.legalPerson || '-',
+        registeredCapital: basicInfo.registeredCapital || '-',
+        establishmentDate: basicInfo.startDate || '-',
+        address: basicInfo.address || '-',
+        businessScope: basicInfo.scope || '-',
+        status: basicInfo.status || '-',
+      },
+      executiveSummary,
+      qccSummary: {
+        riskLevel,
+        riskLevelColor,
+        riskScore: riskSummary.totalScore,
+        totalCriticalRisks: riskSummary.critical.length,
+        totalHighRisks: riskSummary.high.length,
+        patents: ipData.patents,
+        trademarks: ipData.trademarks,
+        softwareCopyrights: ipData.softwareCopyrights,
+        biddingCount: operationData.biddingCount,
+        qualifications: operationData.qualifications,
+      },
+      preparedBy: 'M&A AI 智能并购平台',
+      reportDate: new Date().toLocaleDateString('zh-CN'),
+    }
   }
 
   const toggleSection = (sectionId) => {
@@ -171,7 +388,7 @@ export default function DDReportGenerator({ onComplete }) {
                   {isGenerating ? (
                     <>
                       <Loader2 size={22} className="animate-spin" />
-                      <span>AI正在生成报告中...</span>
+                      <span>{generatingStep || 'AI正在生成报告中...'}</span>
                     </>
                   ) : (
                     <>
@@ -180,6 +397,25 @@ export default function DDReportGenerator({ onComplete }) {
                     </>
                   )}
                 </button>
+
+                {/* Data Source Info */}
+                <div className="flex items-center justify-center space-x-2 text-sm text-gray-500">
+                  <Shield size={14} className="text-green-500" />
+                  <span>基于企查查实时数据生成</span>
+                </div>
+
+                {/* Error Display */}
+                {qccError && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                    <p className="text-sm text-amber-700">
+                      <AlertTriangle size={16} className="inline mr-2" />
+                      {qccError}
+                    </p>
+                    <p className="text-xs text-amber-600 mt-1">
+                      将使用模拟数据生成报告...
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -210,6 +446,50 @@ export default function DDReportGenerator({ onComplete }) {
                 </button>
               </div>
             </div>
+
+            {/* Qichacha Data Summary Banner */}
+            {reportData.qccSummary && (
+              <div className={`mb-6 p-4 rounded-xl border ${
+                reportData.qccSummary.riskLevelColor === 'green' ? 'bg-green-50 border-green-200' :
+                reportData.qccSummary.riskLevelColor === 'yellow' ? 'bg-yellow-50 border-yellow-200' :
+                'bg-red-50 border-red-200'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Shield size={20} className={
+                      reportData.qccSummary.riskLevelColor === 'green' ? 'text-green-600' :
+                      reportData.qccSummary.riskLevelColor === 'yellow' ? 'text-yellow-600' :
+                      'text-red-600'
+                    } />
+                    <span className="font-semibold">企查查风险评估</span>
+                  </div>
+                  <div className="flex items-center space-x-6">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-primary">{reportData.qccSummary.riskScore}</p>
+                      <p className="text-xs text-gray-500">风险指数</p>
+                    </div>
+                    <div className="text-center">
+                      <p className={`text-lg font-bold ${
+                        reportData.qccSummary.riskLevelColor === 'green' ? 'text-green-600' :
+                        reportData.qccSummary.riskLevelColor === 'yellow' ? 'text-yellow-600' :
+                        'text-red-600'
+                      }`}>
+                        {reportData.qccSummary.riskLevel}
+                      </p>
+                      <p className="text-xs text-gray-500">风险等级</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-purple-600">{reportData.qccSummary.patents}</p>
+                      <p className="text-xs text-gray-500">专利数</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-blue-600">{reportData.qccSummary.biddingCount}</p>
+                      <p className="text-xs text-gray-500">招投标</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Collapsible Sections */}
             <div className="space-y-3">

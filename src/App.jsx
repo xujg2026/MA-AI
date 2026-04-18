@@ -10,6 +10,7 @@ import DataManagementPage from './pages/DataManagementPage'
 import NewsPage from './pages/NewsPage'
 import ProspectEntryPage from './pages/ProspectEntryPage'
 import AboutPage from './pages/AboutPage'
+import AIDueDiligencePage from './pages/AIDueDiligencePage'
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
           <Route path="/data-management" element={<DataManagementPage />} />
           <Route path="/news" element={<NewsPage />} />
           <Route path="/prospect-entry" element={<ProspectEntryPage />} />
+          <Route path="/ai-due-diligence" element={<AIDueDiligencePage />} />
           <Route path="/about" element={<AboutPage />} />
         </Routes>
       </main>
