@@ -27,14 +27,22 @@ class QccApiService {
     }
   }
 
-  async callServer(serverType, query) {
+  async callServer(serverType, toolName, args) {
     const url = `${QCC_API_CONFIG.baseUrl}${QCC_API_CONFIG.servers[serverType]}`
 
-    console.log(`[QCC API] 请求 ${serverType}: ${query}`)
+    console.log(`[QCC API] 请求 ${serverType}: ${toolName}`)
     console.log(`[QCC API] URL: ${url}`)
 
-    // 企查查MCP API 使用简单对象格式
-    const requestBody = { query: query }
+    // 企查查MCP API 使用JSON-RPC 2.0格式
+    const requestBody = {
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: toolName,
+        arguments: args
+      },
+      id: Date.now()
+    }
 
     console.log(`[QCC API] 请求体:`, JSON.stringify(requestBody))
 
@@ -64,16 +72,10 @@ class QccApiService {
       console.log(`[QCC API] 原始响应长度: ${responseText.length}`)
       console.log(`[QCC API] 原始响应: ${responseText.substring(0, 500)}...`)
 
-      // 尝试解析为 JSON
-      try {
-        const jsonData = JSON.parse(responseText)
-        console.log(`[QCC API] 解析成功:`, jsonData)
-        return jsonData
-      } catch (parseError) {
-        // 如果不是 JSON，尝试解析 SSE 格式
-        console.log(`[QCC API] 尝试解析 SSE 格式...`)
-        return this.parseSSEResponse(responseText)
-      }
+      // 解析SSE格式响应
+      const result = this.parseSSEResponse(responseText)
+      console.log(`[QCC API] 解析结果:`, result)
+      return result
 
     } catch (error) {
       console.error(`[QCC API] 请求异常:`, error)
@@ -101,26 +103,33 @@ class QccApiService {
         try {
           const jsonData = JSON.parse(dataStr)
 
-          if (jsonData.event === 'error' || jsonData.error) {
-            error = jsonData.message || jsonData.error
+          // 检查JSON-RPC错误
+          if (jsonData.error) {
+            error = jsonData.error.message || JSON.stringify(jsonData.error)
             continue
           }
 
-          if (jsonData.event === 'end') {
-            break
-          }
-
-          if (jsonData.data) {
-            if (typeof jsonData.data === 'string') {
-              result = jsonData.data
-            } else {
-              result = JSON.stringify(jsonData.data)
+          // 解析result.content
+          if (jsonData.result && jsonData.result.content) {
+            const content = jsonData.result.content
+            if (Array.isArray(content) && content.length > 0) {
+              // content是数组，取第一个元素的text字段
+              const firstItem = content[0]
+              if (firstItem.text) {
+                // text是字符串化的JSON，需要二次解析
+                try {
+                  result = JSON.parse(firstItem.text)
+                } catch {
+                  result = firstItem.text
+                }
+              } else {
+                result = firstItem
+              }
             }
-          } else {
-            // 直接返回数据对象
-            result = dataStr
+          } else if (jsonData.result) {
+            result = jsonData.result
           }
-        } catch (e) {
+        } catch {
           // 如果解析失败，保存原始数据
           if (!result) {
             result = dataStr
@@ -137,48 +146,106 @@ class QccApiService {
       return { error: '无数据返回' }
     }
 
-    // 尝试解析结果为 JSON
-    try {
-      return JSON.parse(result)
-    } catch (e) {
-      return { data: result }
-    }
+    return result
   }
 
-  // 获取公司基本信息
+  // 获取公司工商信息
   async getCompanyInfo(companyName) {
-    return this.callServer('company', companyName)
+    return this.callServer('company', 'get_company_registration_info', { searchKey: companyName })
   }
 
-  // 获取风险信息
-  async getRiskInfo(companyName) {
-    return this.callServer('risk', companyName)
+  // 获取股东信息
+  async getShareholderInfo(companyName) {
+    return this.callServer('company', 'get_shareholder_info', { searchKey: companyName })
   }
 
-  // 获取知识产权信息
-  async getIPRInfo(companyName) {
-    return this.callServer('ipr', companyName)
+  // 获取主要人员信息
+  async getKeyPersonnel(companyName) {
+    return this.callServer('company', 'get_key_personnel', { searchKey: companyName })
   }
 
-  // 获取经营信息
-  async getOperationInfo(companyName) {
-    return this.callServer('operation', companyName)
+  // 获取实控人信息
+  async getActualController(companyName) {
+    return this.callServer('company', 'get_actual_controller', { searchKey: companyName })
   }
 
-  // 并行获取所有信息
+  // 获取企业年报
+  async getAnnualReports(companyName) {
+    return this.callServer('company', 'get_annual_reports', { searchKey: companyName })
+  }
+
+  // 获取失信信息
+  async getDishonestInfo(companyName) {
+    return this.callServer('risk', 'get_dishonest_info', { searchKey: companyName })
+  }
+
+  // 获取立案信息
+  async getCaseFilingInfo(companyName) {
+    return this.callServer('risk', 'get_case_filing_info', { searchKey: companyName })
+  }
+
+  // 获取经营异常
+  async getBusinessException(companyName) {
+    return this.callServer('risk', 'get_business_exception', { searchKey: companyName })
+  }
+
+  // 获取行政处罚
+  async getAdministrativePenalty(companyName) {
+    return this.callServer('risk', 'get_administrative_penalty', { searchKey: companyName })
+  }
+
+  // 获取专利信息
+  async getPatentInfo(companyName) {
+    return this.callServer('ipr', 'get_patent_info', { searchKey: companyName })
+  }
+
+  // 获取商标信息
+  async getTrademarkInfo(companyName) {
+    return this.callServer('ipr', 'get_trademark_info', { searchKey: companyName })
+  }
+
+  // 获取招投标信息
+  async getBiddingInfo(companyName) {
+    return this.callServer('operation', 'get_bidding_info', { searchKey: companyName })
+  }
+
+  // 获取资质证书
+  async getQualifications(companyName) {
+    return this.callServer('operation', 'get_qualifications', { searchKey: companyName })
+  }
+
+  // 并行获取所有公司信息
   async getAllCompanyData(companyName) {
-    const [companyInfo, riskInfo, iprInfo, operationInfo] = await Promise.all([
+    const [companyInfo, shareholderInfo, keyPersonnel, actualController,
+           dishonestInfo, caseFilingInfo, businessException, administrativePenalty,
+           patentInfo, trademarkInfo, biddingInfo, qualifications] = await Promise.all([
       this.getCompanyInfo(companyName),
-      this.getRiskInfo(companyName),
-      this.getIPRInfo(companyName),
-      this.getOperationInfo(companyName),
+      this.getShareholderInfo(companyName),
+      this.getKeyPersonnel(companyName),
+      this.getActualController(companyName),
+      this.getDishonestInfo(companyName),
+      this.getCaseFilingInfo(companyName),
+      this.getBusinessException(companyName),
+      this.getAdministrativePenalty(companyName),
+      this.getPatentInfo(companyName),
+      this.getTrademarkInfo(companyName),
+      this.getBiddingInfo(companyName),
+      this.getQualifications(companyName),
     ])
 
     return {
       companyInfo,
-      riskInfo,
-      iprInfo,
-      operationInfo,
+      shareholderInfo,
+      keyPersonnel,
+      actualController,
+      dishonestInfo,
+      caseFilingInfo,
+      businessException,
+      administrativePenalty,
+      patentInfo,
+      trademarkInfo,
+      biddingInfo,
+      qualifications,
     }
   }
 }

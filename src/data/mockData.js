@@ -440,32 +440,22 @@ export const dcfTemplate = {
   years: 5,
 }
 
+// 精简后的DD清单 - 仅保留企查查MCP支持自动填充的项目
 export const ddChecklist = {
-  财务: [
-    '近三年财务报表',
-    '审计报告',
-    '银行流水',
-    '应收账款明细',
-    '固定资产清单',
-  ],
   法务: [
-    '公司章程',
     '股权结构',
-    '重大合同',
     '知识产权证明',
     '诉讼记录',
   ],
-  业务: [
-    '业务模式说明',
-    '客户名单及占比',
-    '供应商清单',
-    '竞争分析',
-    '核心团队简历',
-  ],
   技术: [
     '技术专利清单',
-    '研发投入',
-    '技术团队架构',
-    '技术路线图',
   ],
+}
+
+// DD清单项目与企查查MCP工具的映射
+export const ddChecklistMapping = {
+  '股权结构': { server: 'company', tool: 'get_shareholder_info', field: '股东信息' },
+  '知识产权证明': { server: 'ipr', tool: 'get_patent_info', field: '专利信息' },
+  '诉讼记录': { server: 'risk', tool: 'get_case_filing_info', field: '立案信息' },
+  '技术专利清单': { server: 'ipr', tool: 'get_patent_info', field: '专利信息' },
 }

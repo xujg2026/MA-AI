@@ -26,36 +26,8 @@ import { Card, Button, Badge } from '../ui'
 // 企查查 API Key
 const QCC_API_KEY = 'MohHnWYT7LapgQkP1OGpVHpyS1gLZo2kMkgjvNZoTj5QcvS7'
 
-// Risk items that trigger red flag warnings
-const riskIndicators = [
-  { id: 'debt_ratio', label: '资产负债率', threshold: 70, unit: '%', level: 'high' },
-  { id: 'goodwill_ratio', label: '商誉占比', threshold: 40, unit: '%', level: 'high' },
-  { id: 'consecutive_loss', label: '连续亏损年限', threshold: 2, unit: '年', level: 'high' },
-  { id: 'equity_pledge', label: '股权质押比例', threshold: 70, unit: '%', level: 'critical' },
-  { id: 'related_party_tx', label: '关联交易占比', threshold: 30, unit: '%', level: 'medium' },
-  { id: 'pending_litigation', label: '待决诉讼金额', threshold: 1000, unit: '万', level: 'medium' },
-]
-
-// 模拟风险分析数据（当API不可用时使用）
-const riskAnalysisData = {
-  overall: 72,
-  financial: { score: 75, risks: ['应收账款周转率下降', '存货占比偏高'] },
-  legal: { score: 68, risks: ['股权质押比例过高', '存在未披露担保'] },
-  business: { score: 80, risks: ['客户集中度偏高', '供应商依赖度较高'] },
-  compliance: { score: 85, risks: ['环评资质待续期'] },
-}
-
-const riskHeatMap = [
-  { area: '财务健康', score: 85, status: 'low', trend: '+5%' },
-  { area: '业务协同', score: 72, status: 'medium', trend: '+12%' },
-  { area: '地域匹配', score: 90, status: 'low', trend: '+0%' },
-  { area: '行业前景', score: 78, status: 'medium', trend: '+8%' },
-  { area: '团队稳定性', score: 65, status: 'high', trend: '-3%' },
-  { area: '合规风险', score: 88, status: 'low', trend: '+2%' },
-]
-
-export default function AIDueDiligence({ onComplete }) {
-  const [expandedSections, setExpandedSections] = useState(['财务', '法务'])
+export default function AIDueDiligence() {
+  const [expandedSections, setExpandedSections] = useState(['法务', '技术'])
   const [checkedItems, setCheckedItems] = useState({})
   const [customItem, setCustomItem] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
@@ -64,6 +36,7 @@ export default function AIDueDiligence({ onComplete }) {
   const [analysisResult, setAnalysisResult] = useState(null)
   const [companyInfo, setCompanyInfo] = useState(null)
   const [qccError, setQccError] = useState(null)
+  const [ddApiData, setDdApiData] = useState(null) // 存储从API获取的DD清单数据
 
   const toggleSection = (section) => {
     setExpandedSections((prev) =>
@@ -108,26 +81,6 @@ export default function AIDueDiligence({ onComplete }) {
   const overall = getOverallProgress()
   const progressPercent = overall.total > 0 ? Math.round((overall.checked / overall.total) * 100) : 0
 
-  // 测试API连接
-  const testApiConnection = async () => {
-    console.log('测试API连接...')
-    setQccApiKey(QCC_API_KEY)
-    const qccApi = getQccApi()
-
-    if (!qccApi) {
-      console.error('API服务初始化失败')
-      return
-    }
-
-    try {
-      // 测试一个简单的查询
-      const result = await qccApi.getCompanyInfo('测试公司')
-      console.log('API测试结果:', result)
-    } catch (error) {
-      console.error('API测试异常:', error)
-    }
-  }
-
   // 使用企查查API进行风险分析
   const runRiskAnalysis = async () => {
     if (!selectedCompany.trim()) return
@@ -137,7 +90,6 @@ export default function AIDueDiligence({ onComplete }) {
     setCompanyInfo(null)
     setAnalysisResult(null)
 
-    // 先测试API连接
     console.log('开始企查查API调用...')
     setQccApiKey(QCC_API_KEY)
     const qccApi = getQccApi()
@@ -149,109 +101,199 @@ export default function AIDueDiligence({ onComplete }) {
     }
 
     try {
-      // 串行获取数据以便更好地调试
-      console.log('获取公司信息:', selectedCompany)
-      const companyData = await qccApi.getCompanyInfo(selectedCompany)
-      console.log('公司信息返回:', companyData)
+      // 并行获取所有数据
+      console.log('并行获取公司数据:', selectedCompany)
+      const allData = await qccApi.getAllCompanyData(selectedCompany)
+      console.log('全部数据返回:', allData)
 
-      console.log('获取风险信息:', selectedCompany)
-      const riskData = await qccApi.getRiskInfo(selectedCompany)
-      console.log('风险信息返回:', riskData)
-
-      // 处理公司基本信息
-      let basicInfo = null
-      if (!companyData.error && companyData) {
-        const data = Array.isArray(companyData) ? companyData[0] : companyData
-        basicInfo = {
-          name: data.Name || selectedCompany,
-          creditCode: data.CreditCode || '-',
-          legalPerson: data.LegalPersonName || '-',
-          registeredCapital: data.RegistCapi || '-',
-          paidCapital: data.RecCap || '-',
-          status: data.Status || '-',
-          startDate: data.StartDate || '-',
-          companyType: data.EconKind || '-',
-          scope: data.Scope || '-',
-          address: data.Address || '-',
+      // 解析公司基本信息
+      const companyData = allData.companyInfo
+      if (companyData && !companyData.error) {
+        const basicInfo = {
+          name: companyData.企业名称 || selectedCompany,
+          creditCode: companyData.统一社会信用代码 || '-',
+          legalPerson: companyData.法定代表人 || '-',
+          registeredCapital: companyData.注册资本 || '-',
+          paidCapital: companyData.实缴资本 || '-',
+          status: companyData.登记状态 || '-',
+          startDate: companyData.成立日期 || '-',
+          companyType: companyData.企业类型 || '-',
+          scope: companyData.经营范围 || '-',
+          address: companyData.注册地址 || '-',
         }
         setCompanyInfo(basicInfo)
-      } else if (companyData.error) {
+      } else if (companyData?.error) {
         console.log('公司信息获取失败:', companyData.error)
       }
 
-      // 处理风险数据
-      if (!riskData.error && riskData) {
-        const data = typeof riskData === 'string' ? JSON.parse(riskData) : riskData
+      // 解析风险数据
+      const criticalRisks = []
+      const highRisks = []
 
-        // 提取风险计数
-        const criticalRisks = []
-        const highRisks = []
-
-        // 关键风险
-        if (data.dishonest && data.dishonest > 0) criticalRisks.push({ type: '失信记录', count: data.dishonest })
-        if (data.executed && data.executed > 0) criticalRisks.push({ type: '被执行', count: data.executed })
-        if (data.bankruptcy && data.bankruptcy > 0) criticalRisks.push({ type: '破产记录', count: data.bankruptcy })
-        if (data.equityFreeze && data.equityFreeze > 0) criticalRisks.push({ type: '股权冻结', count: data.equityFreeze })
-
-        // 高风险
-        if (data.businessException && data.businessException > 0) highRisks.push({ type: '经营异常', count: data.businessException })
-        if (data.seriousViolation && data.seriousViolation > 0) highRisks.push({ type: '严重违法', count: data.seriousViolation })
-        if (data.administrativePenalty && data.administrativePenalty > 0) highRisks.push({ type: '行政处罚', count: data.administrativePenalty })
-
-        const totalCritical = criticalRisks.length
-        const totalHigh = highRisks.length
-        const totalRisk = totalCritical + totalHigh
-
-        // 计算综合风险指数
-        let overall = 85 // 基础分
-        if (totalCritical > 0) overall -= totalCritical * 15
-        if (totalHigh > 0) overall -= totalHigh * 8
-        overall = Math.max(0, Math.min(100, overall))
-
-        // 生成风险分析结果
-        const riskResult = {
-          overall,
-          financial: {
-            score: overall + 5,
-            risks: data.financialRisks || ['需结合财务报表分析']
-          },
-          legal: {
-            score: overall - 5,
-            risks: [...criticalRisks.map(r => r.type), ...highRisks.map(r => r.type)]
-          },
-          business: {
-            score: overall + 3,
-            risks: ['需结合业务尽调分析']
-          },
-          compliance: {
-            score: overall + 8,
-            risks: totalCritical === 0 && totalHigh === 0 ? ['未发现明显合规问题'] : []
-          },
-          // 额外的企查查数据
-          qccData: {
-            criticalRisks,
-            highRisks,
-            totalLawsuits: data.lawsuits || 0,
-            totalPenalties: data.administrativePenalty || 0,
-            businessExceptions: data.businessException || 0,
-          }
+      // 关键风险检查
+      const dishonestData = allData.dishonestInfo
+      if (dishonestData && !dishonestData.error && dishonestData.搜索结果) {
+        if (!dishonestData.搜索结果.includes('未发现任何')) {
+          criticalRisks.push({ type: '失信记录', count: 1 })
         }
-
-        setAnalysisResult(riskResult)
-      } else {
-        // API调用失败
-        const errorMsg = riskData.error || companyData.error || '获取数据失败'
-        console.log('API错误:', errorMsg)
-
-        if (errorMsg.includes('CORS')) {
-          setQccError(`${errorMsg}。请通过后端代理访问企查查API。`)
-        } else {
-          setQccError(`${errorMsg}。将使用本地模拟数据。`)
-        }
-
-        // 使用模拟数据作为后备
-        setAnalysisResult(riskAnalysisData)
       }
+
+      const caseData = allData.caseFilingInfo
+      if (caseData && !caseData.error && caseData.立案信息) {
+        const caseCount = caseData.立案信息.length || 0
+        if (caseCount > 0) {
+          highRisks.push({ type: '立案信息', count: caseCount })
+        }
+      }
+
+      const businessExceptionData = allData.businessException
+      if (businessExceptionData && !businessExceptionData.error && businessExceptionData.搜索结果) {
+        if (!businessExceptionData.搜索结果.includes('未发现任何')) {
+          criticalRisks.push({ type: '经营异常', count: 1 })
+        }
+      }
+
+      const penaltyData = allData.administrativePenalty
+      if (penaltyData && !penaltyData.error && penaltyData.搜索结果) {
+        if (!penaltyData.搜索结果.includes('未发现')) {
+          highRisks.push({ type: '行政处罚', count: 1 })
+        }
+      }
+
+      // 解析股东和实控人信息
+      let shareholderData = null
+      let controllerData = null
+      if (allData.shareholderInfo && !allData.shareholderInfo.error) {
+        shareholderData = allData.shareholderInfo
+      }
+      if (allData.actualController && !allData.actualController.error) {
+        controllerData = allData.actualController
+      }
+
+      // 计算综合风险指数
+      let overall = 85 // 基础分
+      if (criticalRisks.length > 0) overall -= criticalRisks.length * 15
+      if (highRisks.length > 0) overall -= highRisks.length * 8
+      overall = Math.max(0, Math.min(100, overall))
+
+      // 基于API数据计算风险热力图各项指标
+      const patentCount = allData.patentInfo?.专利信息?.length || 0
+      const trademarkCount = allData.trademarkInfo?.商标信息?.length || 0
+      const biddingCount = allData.biddingInfo?.招投标信息?.length || 0
+      const qualificationCount = allData.qualifications?.资质证书信息?.length || 0
+      const caseCount = caseData?.立案信息?.length || 0
+      const shareholderCount = shareholderData?.股东信息?.length || 0
+
+      // 计算各项热力图指标
+      const heatMapData = [
+        {
+          area: '合规风险',
+          score: criticalRisks.length === 0 && highRisks.length === 0 ? 95 : overall,
+          status: criticalRisks.length === 0 && highRisks.length === 0 ? 'low' : 'high',
+          trend: criticalRisks.length === 0 ? '+0%' : `-${criticalRisks.length * 15}%`
+        },
+        {
+          area: '法律风险',
+          score: caseCount === 0 ? 90 : Math.max(40, 90 - caseCount * 2),
+          status: caseCount === 0 ? 'low' : caseCount < 10 ? 'medium' : 'high',
+          trend: caseCount === 0 ? '+0%' : `+${caseCount}起`
+        },
+        {
+          area: '知识产权',
+          score: patentCount > 10000 ? 95 : patentCount > 1000 ? 85 : 70,
+          status: patentCount > 1000 ? 'low' : patentCount > 100 ? 'medium' : 'high',
+          trend: `+${patentCount}件`
+        },
+        {
+          area: '经营活跃',
+          score: biddingCount > 1000 ? 90 : biddingCount > 100 ? 75 : 60,
+          status: biddingCount > 100 ? 'low' : 'medium',
+          trend: `+${biddingCount}次`
+        },
+        {
+          area: '团队稳定',
+          score: shareholderCount > 5 ? 80 : 85,
+          status: 'low',
+          trend: '+0%'
+        },
+        {
+          area: '资质齐全',
+          score: qualificationCount > 100 ? 95 : qualificationCount > 10 ? 85 : 70,
+          status: qualificationCount > 10 ? 'low' : 'medium',
+          trend: `+${qualificationCount}个`
+        }
+      ]
+
+      // 生成风险分析结果
+      const riskResult = {
+        overall,
+        financial: {
+          score: overall + 5,
+          risks: ['需结合财务报表分析']
+        },
+        legal: {
+          score: overall - 5,
+          risks: [
+            ...criticalRisks.map(r => `${r.type}(${r.count}条)`),
+            ...highRisks.map(r => `${r.type}(${r.count}条)`)
+          ]
+        },
+        business: {
+          score: overall + 3,
+          risks: ['需结合业务尽调分析']
+        },
+        compliance: {
+          score: overall + 8,
+          risks: criticalRisks.length === 0 && highRisks.length === 0 ? ['未发现明显合规问题'] : []
+        },
+        // 风险热力图数据
+        heatMap: heatMapData,
+        // 额外的企查查数据
+        qccData: {
+          criticalRisks,
+          highRisks,
+          totalLawsuits: caseCount,
+          totalPenalties: penaltyData ? 1 : 0,
+          businessExceptions: businessExceptionData ? 1 : 0,
+          shareholderInfo: shareholderData,
+          actualController: controllerData,
+          patentCount,
+          trademarkCount,
+          biddingCount,
+          qualificationCount,
+        }
+      }
+
+      // 存储DD清单相关数据
+      const apiData = {
+        shareholderInfo: shareholderData,
+        actualController: controllerData,
+        patentInfo: allData.patentInfo,
+        caseFilingInfo: caseData,
+      }
+      setDdApiData(apiData)
+
+      // 自动标记企查查支持的项目为已完成
+      const newCheckedItems = { ...checkedItems }
+      if (shareholderData && !shareholderData.error) {
+        newCheckedItems['法务-股权结构'] = true
+      }
+      if (allData.patentInfo && !allData.patentInfo.error) {
+        newCheckedItems['法务-知识产权证明'] = true
+        newCheckedItems['技术-技术专利清单'] = true
+      }
+      if (caseData && !caseData.error) {
+        newCheckedItems['法务-诉讼记录'] = true
+      }
+      setCheckedItems(newCheckedItems)
+
+      setAnalysisResult(riskResult)
+
+      // 如果所有API调用都失败
+      if (companyData?.error && !allData.dishonestInfo?.error === false) {
+        setQccError('部分数据获取失败，已展示可用数据')
+      }
+
     } catch (error) {
       console.error('企查查API调用失败:', error)
 
@@ -260,9 +302,7 @@ export default function AIDueDiligence({ onComplete }) {
         errorMessage = 'CORS错误或网络问题: API不支持跨域请求，需要后端代理'
       }
 
-      setQccError(`API调用失败: ${errorMessage}，使用本地数据`)
-      // 使用模拟数据作为后备
-      setAnalysisResult(riskAnalysisData)
+      setQccError(`API调用失败: ${errorMessage}`)
     }
 
     setIsAnalyzing(false)
@@ -276,6 +316,156 @@ export default function AIDueDiligence({ onComplete }) {
       case 'critical': return 'bg-red-200 text-red-800'
       default: return 'bg-gray-100 text-gray-700'
     }
+  }
+
+  // 导出DD清单为JSON
+  const exportDDChecklistJson = () => {
+    const exportData = {
+      companyName: selectedCompany,
+      exportDate: new Date().toISOString().split('T')[0],
+      companyInfo: companyInfo,
+      riskAnalysis: analysisResult,
+      ddChecklist: {},
+      apiDataSummary: {},
+    }
+
+    // 构建DD清单状态
+    Object.keys(ddChecklist).forEach(section => {
+      exportData.ddChecklist[section] = {}
+      ddChecklist[section].forEach(item => {
+        const key = `${section}-${item}`
+        exportData.ddChecklist[section][item] = {
+          completed: !!checkedItems[key],
+          hasApiData: !!ddApiData && !!checkedItems[key],
+        }
+      })
+    })
+
+    // API数据摘要
+    if (ddApiData) {
+      if (ddApiData.shareholderInfo && !ddApiData.shareholderInfo.error) {
+        exportData.apiDataSummary.shareholderInfo = ddApiData.shareholderInfo.股东信息
+      }
+      if (ddApiData.patentInfo && !ddApiData.patentInfo.error) {
+        exportData.apiDataSummary.patentCount = ddApiData.patentInfo.专利信息?.length || 0
+        exportData.apiDataSummary.patentSummary = ddApiData.patentInfo.摘要
+      }
+      if (ddApiData.caseFilingInfo && !ddApiData.caseFilingInfo.error) {
+        exportData.apiDataSummary.caseFilingInfo = ddApiData.caseFilingInfo.立案信息
+      }
+      if (ddApiData.actualController && !ddApiData.actualController.error) {
+        exportData.apiDataSummary.actualController = ddApiData.actualController.实际控制人信息
+      }
+    }
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `DD-Checklist-${selectedCompany}-${new Date().toISOString().split('T')[0]}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // 导出DD清单为Markdown
+  const exportDDChecklistMarkdown = () => {
+    let md = `# DD清单导出\n\n`
+    md += `**公司名称**: ${selectedCompany || '未指定'}\n\n`
+    md += `**导出时间**: ${new Date().toISOString().split('T')[0]}\n\n`
+    md += `---\n\n`
+
+    // 公司信息
+    if (companyInfo) {
+      md += `## 企业工商信息\n\n`
+      md += `| 项目 | 内容 |\n`
+      md += `|------|------|\n`
+      md += `| 企业名称 | ${companyInfo.name} |\n`
+      md += `| 统一社会信用代码 | ${companyInfo.creditCode} |\n`
+      md += `| 法定代表人 | ${companyInfo.legalPerson} |\n`
+      md += `| 注册资本 | ${companyInfo.registeredCapital} |\n`
+      md += `| 成立日期 | ${companyInfo.startDate} |\n`
+      md += `| 经营状态 | ${companyInfo.status} |\n`
+      md += `| 注册地址 | ${companyInfo.address} |\n\n`
+    }
+
+    // 风险分析
+    if (analysisResult) {
+      md += `## 风险分析\n\n`
+      md += `- **综合风险指数**: ${analysisResult.overall}\n`
+      md += `- **合规风险**: ${analysisResult.compliance.risks.join(', ') || '未发现明显合规问题'}\n\n`
+    }
+
+    // DD清单
+    md += `## DD清单\n\n`
+    Object.keys(ddChecklist).forEach(section => {
+      md += `### ${section}\n\n`
+      ddChecklist[section].forEach(item => {
+        const key = `${section}-${item}`
+        const isCompleted = !!checkedItems[key]
+        const hasApiData = !!ddApiData && isCompleted
+        md += `- [${isCompleted ? 'x' : ' '}] ${item}${hasApiData ? ' ✓' : ''}\n`
+      })
+      md += `\n`
+    })
+
+    // API数据摘要
+    if (ddApiData) {
+      md += `## 企查查API数据摘要\n\n`
+
+      if (ddApiData.shareholderInfo && !ddApiData.shareholderInfo.error) {
+        const shareholders = ddApiData.shareholderInfo.股东信息 || []
+        md += `### 股东信息\n\n`
+        shareholders.forEach(s => {
+          md += `- ${s.股东名称}: ${s.持股比例}\n`
+        })
+        md += `\n`
+      }
+
+      if (ddApiData.patentInfo && !ddApiData.patentInfo.error) {
+        const patentCount = ddApiData.patentInfo.专利信息?.length || 0
+        md += `### 专利信息\n\n`
+        md += `共 ${patentCount} 件专利\n\n`
+        // 显示前5条
+        const patents = ddApiData.patentInfo.专利信息 || []
+        patents.slice(0, 5).forEach(p => {
+          md += `- ${p.发明名称} (${p.申请号}) - ${p.专利类型}\n`
+        })
+        if (patents.length > 5) {
+          md += `- ...还有 ${patents.length - 5} 条\n`
+        }
+        md += `\n`
+      }
+
+      if (ddApiData.caseFilingInfo && !ddApiData.caseFilingInfo.error) {
+        const cases = ddApiData.caseFilingInfo.立案信息 || []
+        md += `### 立案信息\n\n`
+        md += `共 ${cases.length} 起立案\n\n`
+        cases.slice(0, 5).forEach(c => {
+          md += `- [${c.案号}] ${c.案由} (${c.立案日期})\n`
+        })
+        if (cases.length > 5) {
+          md += `- ...还有 ${cases.length - 5} 条\n`
+        }
+        md += `\n`
+      }
+
+      if (ddApiData.actualController && !ddApiData.actualController.error) {
+        const controllers = ddApiData.actualController.实际控制人信息 || []
+        md += `### 实控人信息\n\n`
+        controllers.forEach(c => {
+          md += `- ${c.实际控制人名称}: 持股${c.总持股比例}, 表决权${c.表决权比例}\n`
+        })
+        md += `\n`
+      }
+    }
+
+    const blob = new Blob([md], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `DD-Checklist-${selectedCompany || 'company'}-${new Date().toISOString().split('T')[0]}.md`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   return (
@@ -420,7 +610,7 @@ export default function AIDueDiligence({ onComplete }) {
                 </Badge>
               </div>
               <div className="space-y-2">
-                {riskHeatMap.map((item) => (
+                {(analysisResult.heatMap || []).map((item) => (
                   <div key={item.area} className="flex items-center justify-between p-2 bg-white rounded-lg">
                     <span className="text-sm text-gray-700">{item.area}</span>
                     <div className="flex items-center space-x-3">
@@ -436,7 +626,7 @@ export default function AIDueDiligence({ onComplete }) {
                       <span className={`text-xs px-2 py-0.5 rounded ${getRiskStatusColor(item.status)}`}>
                         {item.score}%
                       </span>
-                      <span className={`text-xs ${item.trend.startsWith('+') ? 'text-green-600' : 'text-red-600'}`}>
+                      <span className={`text-xs ${item.trend.startsWith('+') ? 'text-green-600' : item.trend.startsWith('-') ? 'text-red-600' : 'text-gray-500'}`}>
                         {item.trend}
                       </span>
                     </div>
@@ -574,26 +764,53 @@ export default function AIDueDiligence({ onComplete }) {
                     {items.map((item) => {
                       const key = `${section}-${item}`
                       const isChecked = checkedItems[key]
+                      const hasApiData = ddApiData && isChecked
+
+                      // 获取API数据的摘要
+                      let apiSummary = null
+                      if (item === '股权结构' && ddApiData?.shareholderInfo) {
+                        const shareholders = ddApiData.shareholderInfo.股东信息 || []
+                        apiSummary = `${shareholders.length}个股东${shareholders[0] ? `, 主要: ${shareholders[0].股东名称}(${shareholders[0].持股比例})` : ''}`
+                      } else if (item === '知识产权证明' && ddApiData?.patentInfo) {
+                        const patents = ddApiData.patentInfo.专利信息 || []
+                        apiSummary = `共${ddApiData.patentInfo.摘要?.match(/\d+/)?.[0] || patents.length}件专利`
+                      } else if (item === '诉讼记录' && ddApiData?.caseFilingInfo) {
+                        const cases = ddApiData.caseFilingInfo.立案信息 || []
+                        apiSummary = `共${cases.length}起立案, 主要案由: ${cases[0]?.案由 || '无'}`
+                      } else if (item === '技术专利清单' && ddApiData?.patentInfo) {
+                        const patents = ddApiData.patentInfo.专利信息 || []
+                        apiSummary = `共${ddApiData.patentInfo.摘要?.match(/\d+/)?.[0] || patents.length}件专利`
+                      }
+
                       return (
-                        <label
-                          key={item}
-                          className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked || false}
-                            onChange={() => toggleItem(section, item)}
-                            className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
-                          />
-                          {isChecked ? (
-                            <CheckCircle size={18} className="text-green-500" />
-                          ) : (
-                            <Circle size={18} className="text-gray-300" />
+                        <div key={item} className="space-y-1">
+                          <label className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={isChecked || false}
+                              onChange={() => toggleItem(section, item)}
+                              className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                            />
+                            {isChecked ? (
+                              <CheckCircle size={18} className="text-green-500" />
+                            ) : (
+                              <Circle size={18} className="text-gray-300" />
+                            )}
+                            <span className={`text-sm ${isChecked ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
+                              {item}
+                            </span>
+                            {hasApiData && (
+                              <Badge variant="success" className="ml-auto text-xs">
+                                已获取
+                              </Badge>
+                            )}
+                          </label>
+                          {hasApiData && apiSummary && (
+                            <div className="ml-8 text-xs text-gray-500 bg-gray-50 p-2 rounded">
+                              {apiSummary}
+                            </div>
                           )}
-                          <span className={`text-sm ${isChecked ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
-                            {item}
-                          </span>
-                        </label>
+                        </div>
                       )
                     })}
 
@@ -620,9 +837,12 @@ export default function AIDueDiligence({ onComplete }) {
       </div>
 
       {/* Export */}
-      <div className="flex justify-end">
-        <Button variant="primary" icon={Download}>
-          导出DD清单
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" icon={Download} onClick={exportDDChecklistJson}>
+          导出JSON
+        </Button>
+        <Button variant="primary" icon={Download} onClick={exportDDChecklistMarkdown}>
+          导出Markdown
         </Button>
       </div>
     </div>
