@@ -37,6 +37,7 @@ export default function AIDueDiligence() {
   const [companyInfo, setCompanyInfo] = useState(null)
   const [qccError, setQccError] = useState(null)
   const [ddApiData, setDdApiData] = useState(null) // 存储从API获取的DD清单数据
+  const [expandedItems, setExpandedItems] = useState({}) // 跟踪哪些项目被展开了
 
   const toggleSection = (section) => {
     setExpandedSections((prev) =>
@@ -48,7 +49,32 @@ export default function AIDueDiligence() {
 
   const toggleItem = (section, item) => {
     const key = `${section}-${item}`
+    const newChecked = !checkedItems[key]
+
     setCheckedItems((prev) => ({
+      ...prev,
+      [key]: newChecked,
+    }))
+
+    // 如果勾选，则展开详情；如果取消勾选，则折叠
+    if (newChecked) {
+      setExpandedItems((prev) => ({ ...prev, [key]: true }))
+      // 同时展开对应的section
+      if (!expandedSections.includes(section)) {
+        setExpandedSections((prev) => [...prev, section])
+      }
+    } else {
+      setExpandedItems((prev) => {
+        const next = { ...prev }
+        delete next[key]
+        return next
+      })
+    }
+  }
+
+  const toggleItemDetail = (section, item) => {
+    const key = `${section}-${item}`
+    setExpandedItems((prev) => ({
       ...prev,
       [key]: !prev[key],
     }))
@@ -273,19 +299,41 @@ export default function AIDueDiligence() {
       }
       setDdApiData(apiData)
 
-      // 自动标记企查查支持的项目为已完成
+      // 自动标记企查查支持的项目为已完成，并展开详情
       const newCheckedItems = { ...checkedItems }
+      const newExpandedItems = { ...expandedItems }
+      const newExpandedSections = [...expandedSections]
+      const sectionsToExpand = new Set()
+
       if (shareholderData && !shareholderData.error) {
         newCheckedItems['法务-股权结构'] = true
+        newExpandedItems['法务-股权结构'] = true
+        sectionsToExpand.add('法务')
       }
       if (allData.patentInfo && !allData.patentInfo.error) {
         newCheckedItems['法务-知识产权证明'] = true
+        newExpandedItems['法务-知识产权证明'] = true
         newCheckedItems['技术-技术专利清单'] = true
+        newExpandedItems['技术-技术专利清单'] = true
+        sectionsToExpand.add('法务')
+        sectionsToExpand.add('技术')
       }
       if (caseData && !caseData.error) {
         newCheckedItems['法务-诉讼记录'] = true
+        newExpandedItems['法务-诉讼记录'] = true
+        sectionsToExpand.add('法务')
       }
+
+      // 添加需要展开的section
+      sectionsToExpand.forEach(section => {
+        if (!newExpandedSections.includes(section)) {
+          newExpandedSections.push(section)
+        }
+      })
+
       setCheckedItems(newCheckedItems)
+      setExpandedItems(newExpandedItems)
+      setExpandedSections(newExpandedSections)
 
       setAnalysisResult(riskResult)
 
@@ -765,26 +813,86 @@ export default function AIDueDiligence() {
                       const key = `${section}-${item}`
                       const isChecked = checkedItems[key]
                       const hasApiData = ddApiData && isChecked
+                      const isItemExpanded = expandedItems[key]
 
-                      // 获取API数据的摘要
-                      let apiSummary = null
-                      if (item === '股权结构' && ddApiData?.shareholderInfo) {
-                        const shareholders = ddApiData.shareholderInfo.股东信息 || []
-                        apiSummary = `${shareholders.length}个股东${shareholders[0] ? `, 主要: ${shareholders[0].股东名称}(${shareholders[0].持股比例})` : ''}`
-                      } else if (item === '知识产权证明' && ddApiData?.patentInfo) {
-                        const patents = ddApiData.patentInfo.专利信息 || []
-                        apiSummary = `共${ddApiData.patentInfo.摘要?.match(/\d+/)?.[0] || patents.length}件专利`
-                      } else if (item === '诉讼记录' && ddApiData?.caseFilingInfo) {
-                        const cases = ddApiData.caseFilingInfo.立案信息 || []
-                        apiSummary = `共${cases.length}起立案, 主要案由: ${cases[0]?.案由 || '无'}`
-                      } else if (item === '技术专利清单' && ddApiData?.patentInfo) {
-                        const patents = ddApiData.patentInfo.专利信息 || []
-                        apiSummary = `共${ddApiData.patentInfo.摘要?.match(/\d+/)?.[0] || patents.length}件专利`
+                      // 渲染API数据详情
+                      const renderApiDetail = () => {
+                        if (!hasApiData) return null
+
+                        if (item === '股权结构' && ddApiData?.shareholderInfo) {
+                          const shareholders = ddApiData.shareholderInfo.股东信息 || []
+                          return (
+                            <div className="mt-2 space-y-2">
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="bg-gray-100">
+                                    <th className="p-2 text-left">股东名称</th>
+                                    <th className="p-2 text-left">持股比例</th>
+                                    <th className="p-2 text-left">认缴出资额</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {shareholders.map((s, i) => (
+                                    <tr key={i} className="border-t">
+                                      <td className="p-2">{s.股东名称}</td>
+                                      <td className="p-2">{s.持股比例}</td>
+                                      <td className="p-2">{s.认缴出资额}万元</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )
+                        }
+
+                        if ((item === '知识产权证明' || item === '技术专利清单') && ddApiData?.patentInfo) {
+                          const patents = ddApiData.patentInfo.专利信息 || []
+                          const totalPatents = ddApiData.patentInfo.摘要?.match(/\d+/)?.[0] || patents.length
+                          return (
+                            <div className="mt-2 space-y-2">
+                              <p className="text-xs text-gray-500">共 {totalPatents} 件专利，展示前10条：</p>
+                              <div className="max-h-48 overflow-y-auto space-y-1">
+                                {patents.slice(0, 10).map((p, i) => (
+                                  <div key={i} className="text-xs p-2 bg-gray-50 rounded">
+                                    <div className="font-medium">{p.发明名称}</div>
+                                    <div className="text-gray-500">
+                                      {p.申请号} | {p.专利类型} | {p.申请日期}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        }
+
+                        if (item === '诉讼记录' && ddApiData?.caseFilingInfo) {
+                          const cases = ddApiData.caseFilingInfo.立案信息 || []
+                          return (
+                            <div className="mt-2 space-y-2">
+                              <p className="text-xs text-gray-500">共 {cases.length} 起立案，展示前10条：</p>
+                              <div className="max-h-48 overflow-y-auto space-y-1">
+                                {cases.slice(0, 10).map((c, i) => (
+                                  <div key={i} className="text-xs p-2 bg-gray-50 rounded">
+                                    <div className="font-medium">{c.案号}</div>
+                                    <div className="text-gray-500">
+                                      {c.案由} | {c.立案日期} | {c.法院}
+                                    </div>
+                                    <div className="text-gray-400">
+                                      {c.当事人 ? `原告: ${c.当事人.原告?.join(', ') || '-'} | 被告: ${c.当事人.被告?.join(', ') || '-'}` : ''}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        }
+
+                        return null
                       }
 
                       return (
                         <div key={item} className="space-y-1">
-                          <label className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+                          <div className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50">
                             <input
                               type="checkbox"
                               checked={isChecked || false}
@@ -796,20 +904,24 @@ export default function AIDueDiligence() {
                             ) : (
                               <Circle size={18} className="text-gray-300" />
                             )}
-                            <span className={`text-sm ${isChecked ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
+                            <span className={`text-sm flex-1 ${isChecked ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
                               {item}
                             </span>
                             {hasApiData && (
-                              <Badge variant="success" className="ml-auto text-xs">
+                              <button
+                                onClick={() => toggleItemDetail(section, item)}
+                                className="text-xs text-primary hover:underline"
+                              >
+                                {isItemExpanded ? '收起' : '查看详情'}
+                              </button>
+                            )}
+                            {hasApiData && (
+                              <Badge variant="success" className="text-xs">
                                 已获取
                               </Badge>
                             )}
-                          </label>
-                          {hasApiData && apiSummary && (
-                            <div className="ml-8 text-xs text-gray-500 bg-gray-50 p-2 rounded">
-                              {apiSummary}
-                            </div>
-                          )}
+                          </div>
+                          {isItemExpanded && renderApiDetail()}
                         </div>
                       )
                     })}
