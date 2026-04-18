@@ -33,11 +33,22 @@ class QccApiService {
     console.log(`[QCC API] 请求 ${serverType}: ${query}`)
     console.log(`[QCC API] URL: ${url}`)
 
+    // 构建 JSON-RPC 2.0 格式请求
+    const jsonrpcRequest = {
+      jsonrpc: '2.0',
+      id: 1,
+      params: {
+        query: query,
+      },
+    }
+
+    console.log(`[QCC API] 请求体:`, JSON.stringify(jsonrpcRequest))
+
     try {
       const response = await fetch(url, {
         method: 'POST',
         headers: this.getHeaders(),
-        body: JSON.stringify({ query }),
+        body: JSON.stringify(jsonrpcRequest),
       })
 
       console.log(`[QCC API] 响应状态: ${response.status}`)
