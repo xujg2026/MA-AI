@@ -851,28 +851,38 @@ export default function AIDueDiligence() {
                           return (
                             <div className="mt-2 space-y-2">
                               <p className="text-xs text-gray-500">共 {totalPatents} 件专利，展示前10条：</p>
-                              <div className="max-h-48 overflow-y-auto space-y-1">
-                                {patents.slice(0, 10).map((p, i) => (
-                                  <div key={i} className="text-xs p-2 bg-gray-50 rounded">
-                                    <div className="flex items-start justify-between">
-                                      <div className="flex-1">
-                                        <div className="font-medium">{p.发明名称}</div>
-                                        <div className="text-gray-500">
-                                          {p.申请号} | {p.专利类型} | {p.申请日期}
-                                        </div>
-                                      </div>
-                                      <a
-                                        href={`https://ai.qcc.com/patent/${p.申请号}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="ml-2 text-primary hover:underline text-xs whitespace-nowrap"
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        查看详情 →
-                                      </a>
-                                    </div>
-                                  </div>
-                                ))}
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="bg-gray-100">
+                                      <th className="p-2 text-left">发明名称</th>
+                                      <th className="p-2 text-left">申请号</th>
+                                      <th className="p-2 text-left">公开(公告)号</th>
+                                      <th className="p-2 text-left">类型</th>
+                                      <th className="p-2 text-left">状态</th>
+                                      <th className="p-2 text-left">申请日期</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {patents.slice(0, 10).map((p, i) => {
+                                      const pubNum = p['公开（公告）号'] || '-'
+                                      return (
+                                        <tr key={i} className="border-t">
+                                          <td className="p-2 max-w-xs truncate" title={p.发明名称}>{p.发明名称}</td>
+                                          <td className="p-2">{p.申请号}</td>
+                                          <td className="p-2">{pubNum}</td>
+                                          <td className="p-2">{p.专利类型}</td>
+                                          <td className="p-2">
+                                            <span className={`px-1.5 py-0.5 rounded ${p.法律状态 === '授权' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                              {p.法律状态}
+                                            </span>
+                                          </td>
+                                          <td className="p-2">{p.申请日期}</td>
+                                        </tr>
+                                      )
+                                    })}
+                                  </tbody>
+                                </table>
                               </div>
                             </div>
                           )
@@ -883,31 +893,35 @@ export default function AIDueDiligence() {
                           return (
                             <div className="mt-2 space-y-2">
                               <p className="text-xs text-gray-500">共 {cases.length} 起立案，展示前10条：</p>
-                              <div className="max-h-48 overflow-y-auto space-y-1">
-                                {cases.slice(0, 10).map((c, i) => (
-                                  <div key={i} className="text-xs p-2 bg-gray-50 rounded">
-                                    <div className="flex items-start justify-between">
-                                      <div className="flex-1">
-                                        <div className="font-medium">{c.案号}</div>
-                                        <div className="text-gray-500">
-                                          {c.案由} | {c.立案日期} | {c.法院}
-                                        </div>
-                                        <div className="text-gray-400">
-                                          {c.当事人 ? `原告: ${c.当事人.原告?.join(', ') || '-'} | 被告: ${c.当事人.被告?.join(', ') || '-'}` : ''}
-                                        </div>
-                                      </div>
-                                      <a
-                                        href={`https://ai.qcc.com/case/${encodeURIComponent(c.案号)}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="ml-2 text-primary hover:underline text-xs whitespace-nowrap"
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        查看详情 →
-                                      </a>
-                                    </div>
-                                  </div>
-                                ))}
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="bg-gray-100">
+                                      <th className="p-2 text-left">案号</th>
+                                      <th className="p-2 text-left">案由</th>
+                                      <th className="p-2 text-left">法院</th>
+                                      <th className="p-2 text-left">立案日期</th>
+                                      <th className="p-2 text-left">原告</th>
+                                      <th className="p-2 text-left">被告</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {cases.slice(0, 10).map((c, i) => (
+                                      <tr key={i} className="border-t">
+                                        <td className="p-2 max-w-xs truncate">{c.案号}</td>
+                                        <td className="p-2">{c.案由}</td>
+                                        <td className="p-2">{c.法院}</td>
+                                        <td className="p-2">{c.立案日期}</td>
+                                        <td className="p-2 max-w-xs truncate" title={c.当事人?.原告?.join(', ')}>
+                                          {c.当事人?.原告?.join(', ') || '-'}
+                                        </td>
+                                        <td className="p-2 max-w-xs truncate" title={c.当事人?.被告?.join(', ')}>
+                                          {c.当事人?.被告?.join(', ') || '-'}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
                               </div>
                             </div>
                           )
