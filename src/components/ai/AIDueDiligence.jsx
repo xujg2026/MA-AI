@@ -848,13 +848,14 @@ export default function AIDueDiligence() {
                         if ((item === '知识产权证明' || item === '技术专利清单') && ddApiData?.patentInfo) {
                           const patents = ddApiData.patentInfo.专利信息 || []
                           const totalPatents = ddApiData.patentInfo.摘要?.match(/\d+/)?.[0] || patents.length
+                          const displayPatents = patents.slice(0, 50)
                           return (
                             <div className="mt-2 space-y-2">
-                              <p className="text-xs text-gray-500">共 {totalPatents} 件专利，展示前10条：</p>
-                              <div className="overflow-x-auto">
+                              <p className="text-xs text-gray-500">共 {totalPatents} 件专利，展示前{displayPatents.length}条（可滚动查看更多）：</p>
+                              <div className="max-h-96 overflow-y-auto border rounded-lg">
                                 <table className="w-full text-xs">
-                                  <thead>
-                                    <tr className="bg-gray-100">
+                                  <thead className="sticky top-0 bg-gray-100 shadow-sm">
+                                    <tr>
                                       <th className="p-2 text-left">发明名称</th>
                                       <th className="p-2 text-left">申请号</th>
                                       <th className="p-2 text-left">公开(公告)号</th>
@@ -864,7 +865,7 @@ export default function AIDueDiligence() {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {patents.slice(0, 10).map((p, i) => {
+                                    {displayPatents.map((p, i) => {
                                       const pubNum = p['公开（公告）号'] || '-'
                                       return (
                                         <tr key={i} className="border-t">
@@ -890,13 +891,14 @@ export default function AIDueDiligence() {
 
                         if (item === '诉讼记录' && ddApiData?.caseFilingInfo) {
                           const cases = ddApiData.caseFilingInfo.立案信息 || []
+                          const displayCases = cases.slice(0, 50)
                           return (
                             <div className="mt-2 space-y-2">
-                              <p className="text-xs text-gray-500">共 {cases.length} 起立案，展示前10条：</p>
-                              <div className="overflow-x-auto">
+                              <p className="text-xs text-gray-500">共 {cases.length} 起立案，展示前{displayCases.length}条（可滚动查看更多）：</p>
+                              <div className="max-h-96 overflow-y-auto border rounded-lg">
                                 <table className="w-full text-xs">
-                                  <thead>
-                                    <tr className="bg-gray-100">
+                                  <thead className="sticky top-0 bg-gray-100 shadow-sm">
+                                    <tr>
                                       <th className="p-2 text-left">案号</th>
                                       <th className="p-2 text-left">案由</th>
                                       <th className="p-2 text-left">法院</th>
@@ -906,7 +908,7 @@ export default function AIDueDiligence() {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {cases.slice(0, 10).map((c, i) => (
+                                    {displayCases.map((c, i) => (
                                       <tr key={i} className="border-t">
                                         <td className="p-2 max-w-xs truncate">{c.案号}</td>
                                         <td className="p-2">{c.案由}</td>
