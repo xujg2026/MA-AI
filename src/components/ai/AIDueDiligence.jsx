@@ -292,10 +292,25 @@ export default function AIDueDiligence() {
 
       // 存储DD清单相关数据
       const apiData = {
+        // 公司概况
+        companyInfo: companyData,
         shareholderInfo: shareholderData,
         actualController: controllerData,
+        externalInvestments: allData.externalInvestments,
+        changeRecords: allData.changeRecords,
+        keyPersonnel: allData.keyPersonnel,
+        // 法务
         patentInfo: allData.patentInfo,
+        trademarkInfo: allData.trademarkInfo,
         caseFilingInfo: caseData,
+        judicialDocuments: allData.judicialDocuments,
+        // 技术
+        softwareCopyright: allData.softwareCopyright,
+        // 经营
+        biddingInfo: allData.biddingInfo,
+        qualifications: allData.qualifications,
+        creditEvaluation: allData.creditEvaluation,
+        recruitmentInfo: allData.recruitmentInfo,
       }
       setDdApiData(apiData)
 
@@ -305,11 +320,29 @@ export default function AIDueDiligence() {
       const newExpandedSections = [...expandedSections]
       const sectionsToExpand = new Set()
 
-      if (shareholderData && !shareholderData.error) {
-        newCheckedItems['法务-股权结构'] = true
-        newExpandedItems['法务-股权结构'] = true
-        sectionsToExpand.add('法务')
+      // 公司概况
+      if (companyData && !companyData.error) {
+        newCheckedItems['公司概况-公司基本信息'] = true
+        newExpandedItems['公司概况-公司基本信息'] = true
+        sectionsToExpand.add('公司概况')
       }
+      if (shareholderData && !shareholderData.error) {
+        newCheckedItems['公司概况-股权结构'] = true
+        newExpandedItems['公司概况-股权结构'] = true
+        sectionsToExpand.add('公司概况')
+      }
+      if (allData.externalInvestments && !allData.externalInvestments.error) {
+        newCheckedItems['公司概况-对外投资'] = true
+        newExpandedItems['公司概况-对外投资'] = true
+        sectionsToExpand.add('公司概况')
+      }
+      if (allData.changeRecords && !allData.changeRecords.error) {
+        newCheckedItems['公司概况-变更记录'] = true
+        newExpandedItems['公司概况-变更记录'] = true
+        sectionsToExpand.add('公司概况')
+      }
+
+      // 法务
       if (allData.patentInfo && !allData.patentInfo.error) {
         newCheckedItems['法务-知识产权证明'] = true
         newExpandedItems['法务-知识产权证明'] = true
@@ -322,6 +355,40 @@ export default function AIDueDiligence() {
         newCheckedItems['法务-诉讼记录'] = true
         newExpandedItems['法务-诉讼记录'] = true
         sectionsToExpand.add('法务')
+      }
+      if (allData.judicialDocuments && !allData.judicialDocuments.error) {
+        newCheckedItems['法务-司法风险'] = true
+        newExpandedItems['法务-司法风险'] = true
+        sectionsToExpand.add('法务')
+      }
+
+      // 技术
+      if (allData.softwareCopyright && !allData.softwareCopyright.error) {
+        newCheckedItems['技术-软件著作权'] = true
+        newExpandedItems['技术-软件著作权'] = true
+        sectionsToExpand.add('技术')
+      }
+
+      // 经营
+      if (allData.biddingInfo && !allData.biddingInfo.error) {
+        newCheckedItems['经营-招投标情况'] = true
+        newExpandedItems['经营-招投标情况'] = true
+        sectionsToExpand.add('经营')
+      }
+      if (allData.qualifications && !allData.qualifications.error) {
+        newCheckedItems['经营-资质证书'] = true
+        newExpandedItems['经营-资质证书'] = true
+        sectionsToExpand.add('经营')
+      }
+      if (allData.creditEvaluation && !allData.creditEvaluation.error) {
+        newCheckedItems['经营-信用评价'] = true
+        newExpandedItems['经营-信用评价'] = true
+        sectionsToExpand.add('经营')
+      }
+      if (allData.recruitmentInfo && !allData.recruitmentInfo.error) {
+        newCheckedItems['经营-招聘信息'] = true
+        newExpandedItems['经营-招聘信息'] = true
+        sectionsToExpand.add('经营')
       }
 
       // 添加需要展开的section
@@ -920,6 +987,271 @@ export default function AIDueDiligence() {
                                         <td className="p-2 max-w-xs truncate" title={c.当事人?.被告?.join(', ')}>
                                           {c.当事人?.被告?.join(', ') || '-'}
                                         </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )
+                        }
+
+                        // 公司基本信息
+                        if (item === '公司基本信息' && ddApiData?.companyInfo) {
+                          const info = ddApiData.companyInfo
+                          return (
+                            <div className="mt-2">
+                              <table className="w-full text-xs">
+                                <tbody>
+                                  <tr className="border-b"><td className="p-2 text-gray-500 w-28">企业名称</td><td className="p-2">{info.企业名称}</td></tr>
+                                  <tr className="border-b"><td className="p-2 text-gray-500">统一社会信用代码</td><td className="p-2">{info.统一社会信用代码}</td></tr>
+                                  <tr className="border-b"><td className="p-2 text-gray-500">法定代表人</td><td className="p-2">{info.法定代表人}</td></tr>
+                                  <tr className="border-b"><td className="p-2 text-gray-500">注册资本</td><td className="p-2">{info.注册资本}</td></tr>
+                                  <tr className="border-b"><td className="p-2 text-gray-500">成立日期</td><td className="p-2">{info.成立日期}</td></tr>
+                                  <tr className="border-b"><td className="p-2 text-gray-500">经营状态</td><td className="p-2">{info.登记状态}</td></tr>
+                                  <tr className="border-b"><td className="p-2 text-gray-500">企业类型</td><td className="p-2">{info.企业类型}</td></tr>
+                                  <tr className="border-b"><td className="p-2 text-gray-500">注册地址</td><td className="p-2">{info.注册地址}</td></tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          )
+                        }
+
+                        // 对外投资
+                        if (item === '对外投资' && ddApiData?.externalInvestments) {
+                          const investments = ddApiData.externalInvestments.对外投资信息 || []
+                          const total = ddApiData.externalInvestments.摘要?.match(/\d+/)?.[0] || investments.length
+                          return (
+                            <div className="mt-2 space-y-2">
+                              <p className="text-xs text-gray-500">共对外投资 {total} 个公司，展示前10条：</p>
+                              <div className="max-h-48 overflow-y-auto border rounded-lg">
+                                <table className="w-full text-xs">
+                                  <thead className="sticky top-0 bg-gray-100">
+                                    <tr>
+                                      <th className="p-2 text-left">被投资企业</th>
+                                      <th className="p-2 text-left">持股比例</th>
+                                      <th className="p-2 text-left">认缴出资额</th>
+                                      <th className="p-2 text-left">成立日期</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {investments.slice(0, 10).map((inv, i) => (
+                                      <tr key={i} className="border-t">
+                                        <td className="p-2">{inv.被投资企业名称 || inv.企业名称}</td>
+                                        <td className="p-2">{inv.持股比例 || '-'}</td>
+                                        <td className="p-2">{inv.认缴出资额 || '-'}万元</td>
+                                        <td className="p-2">{inv.成立日期 || '-'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )
+                        }
+
+                        // 变更记录
+                        if (item === '变更记录' && ddApiData?.changeRecords) {
+                          const changes = ddApiData.changeRecords.变更记录 || []
+                          return (
+                            <div className="mt-2 space-y-2">
+                              <p className="text-xs text-gray-500">共 {changes.length} 条变更记录，展示前10条：</p>
+                              <div className="max-h-48 overflow-y-auto border rounded-lg">
+                                <table className="w-full text-xs">
+                                  <thead className="sticky top-0 bg-gray-100">
+                                    <tr>
+                                      <th className="p-2 text-left">变更事项</th>
+                                      <th className="p-2 text-left">变更前</th>
+                                      <th className="p-2 text-left">变更后</th>
+                                      <th className="p-2 text-left">变更日期</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {changes.slice(0, 10).map((c, i) => (
+                                      <tr key={i} className="border-t">
+                                        <td className="p-2">{c.变更事项}</td>
+                                        <td className="p-2 max-w-xs truncate">{c.变更前 || '-'}</td>
+                                        <td className="p-2 max-w-xs truncate">{c.变更后 || '-'}</td>
+                                        <td className="p-2">{c.变更日期}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )
+                        }
+
+                        // 司法风险 - 裁判文书
+                        if (item === '司法风险' && ddApiData?.judicialDocuments) {
+                          const docs = ddApiData.judicialDocuments.裁判文书 || []
+                          return (
+                            <div className="mt-2 space-y-2">
+                              <p className="text-xs text-gray-500">共 {docs.length} 条裁判文书，展示前10条：</p>
+                              <div className="max-h-48 overflow-y-auto border rounded-lg">
+                                <table className="w-full text-xs">
+                                  <thead className="sticky top-0 bg-gray-100">
+                                    <tr>
+                                      <th className="p-2 text-left">案号</th>
+                                      <th className="p-2 text-left">案由</th>
+                                      <th className="p-2 text-left">裁判结果</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {docs.slice(0, 10).map((d, i) => (
+                                      <tr key={i} className="border-t">
+                                        <td className="p-2 max-w-xs truncate">{d.案号}</td>
+                                        <td className="p-2">{d.案由}</td>
+                                        <td className="p-2 max-w-xs truncate">{d.裁判结果 || '-'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )
+                        }
+
+                        // 软件著作权
+                        if (item === '软件著作权' && ddApiData?.softwareCopyright) {
+                          const copyrights = ddApiData.softwareCopyright.软件著作权 || []
+                          const total = ddApiData.softwareCopyright.摘要?.match(/\d+/)?.[0] || copyrights.length
+                          return (
+                            <div className="mt-2 space-y-2">
+                              <p className="text-xs text-gray-500">共 {total} 个软件著作权，展示前10条：</p>
+                              <div className="max-h-48 overflow-y-auto border rounded-lg">
+                                <table className="w-full text-xs">
+                                  <thead className="sticky top-0 bg-gray-100">
+                                    <tr>
+                                      <th className="p-2 text-left">软件名称</th>
+                                      <th className="p-2 text-left">登记号</th>
+                                      <th className="p-2 text-left">版本号</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {copyrights.slice(0, 10).map((c, i) => (
+                                      <tr key={i} className="border-t">
+                                        <td className="p-2">{c.软件名称 || c.作品名称}</td>
+                                        <td className="p-2">{c.登记号}</td>
+                                        <td className="p-2">{c.版本号 || '-'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )
+                        }
+
+                        // 招投标情况
+                        if (item === '招投标情况' && ddApiData?.biddingInfo) {
+                          const biddings = ddApiData.biddingInfo.招投标信息 || []
+                          return (
+                            <div className="mt-2 space-y-2">
+                              <p className="text-xs text-gray-500">共 {biddings.length} 条招投标记录，展示前10条：</p>
+                              <div className="max-h-48 overflow-y-auto border rounded-lg">
+                                <table className="w-full text-xs">
+                                  <thead className="sticky top-0 bg-gray-100">
+                                    <tr>
+                                      <th className="p-2 text-left">项目名称</th>
+                                      <th className="p-2 text-left">中标单位</th>
+                                      <th className="p-2 text-left">中标金额</th>
+                                      <th className="p-2 text-left">日期</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {biddings.slice(0, 10).map((b, i) => (
+                                      <tr key={i} className="border-t">
+                                        <td className="p-2 max-w-xs truncate">{b.项目名称}</td>
+                                        <td className="p-2">{b.中标单位?.join(', ') || '-'}</td>
+                                        <td className="p-2">{b.中标金额 || '-'}</td>
+                                        <td className="p-2">{b.发布日期}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )
+                        }
+
+                        // 资质证书
+                        if (item === '资质证书' && ddApiData?.qualifications) {
+                          const quals = ddApiData.qualifications.资质证书信息 || []
+                          const total = ddApiData.qualifications.摘要?.match(/\d+/)?.[0] || quals.length
+                          return (
+                            <div className="mt-2 space-y-2">
+                              <p className="text-xs text-gray-500">共 {total} 个资质证书，展示前10条：</p>
+                              <div className="max-h-48 overflow-y-auto border rounded-lg">
+                                <table className="w-full text-xs">
+                                  <thead className="sticky top-0 bg-gray-100">
+                                    <tr>
+                                      <th className="p-2 text-left">资质名称</th>
+                                      <th className="p-2 text-left">证书编号</th>
+                                      <th className="p-2 text-left">有效期至</th>
+                                      <th className="p-2 text-left">状态</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {quals.slice(0, 10).map((q, i) => (
+                                      <tr key={i} className="border-t">
+                                        <td className="p-2">{q.资质名称}</td>
+                                        <td className="p-2">{q.证书编号}</td>
+                                        <td className="p-2">{q.有效期至}</td>
+                                        <td className="p-2">
+                                          <span className={`px-1.5 py-0.5 rounded ${q.证书状态 === '有效' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                            {q.证书状态}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )
+                        }
+
+                        // 信用评价
+                        if (item === '信用评价' && ddApiData?.creditEvaluation) {
+                          const credit = ddApiData.creditEvaluation
+                          return (
+                            <div className="mt-2">
+                              <table className="w-full text-xs">
+                                <tbody>
+                                  <tr className="border-b"><td className="p-2 text-gray-500">信用评级</td><td className="p-2">{credit.信用评级 || '-'}</td></tr>
+                                  <tr className="border-b"><td className="p-2 text-gray-500">评价日期</td><td className="p-2">{credit.评价日期 || '-'}</td></tr>
+                                  <tr className="border-b"><td className="p-2 text-gray-500">评价机构</td><td className="p-2">{credit.评价机构 || '-'}</td></tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          )
+                        }
+
+                        // 招聘信息
+                        if (item === '招聘信息' && ddApiData?.recruitmentInfo) {
+                          const recruits = ddApiData.recruitmentInfo.招聘信息 || []
+                          const total = ddApiData.recruitmentInfo.摘要?.match(/\d+/)?.[0] || recruits.length
+                          return (
+                            <div className="mt-2 space-y-2">
+                              <p className="text-xs text-gray-500">共 {total} 条招聘记录，展示前10条：</p>
+                              <div className="max-h-48 overflow-y-auto border rounded-lg">
+                                <table className="w-full text-xs">
+                                  <thead className="sticky top-0 bg-gray-100">
+                                    <tr>
+                                      <th className="p-2 text-left">职位名称</th>
+                                      <th className="p-2 text-left">工作地点</th>
+                                      <th className="p-2 text-left">薪资范围</th>
+                                      <th className="p-2 text-left">发布日期</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {recruits.slice(0, 10).map((r, i) => (
+                                      <tr key={i} className="border-t">
+                                        <td className="p-2">{r.职位名称}</td>
+                                        <td className="p-2">{r.工作地点 || '-'}</td>
+                                        <td className="p-2">{r.薪资范围 || '-'}</td>
+                                        <td className="p-2">{r.发布日期}</td>
                                       </tr>
                                     ))}
                                   </tbody>

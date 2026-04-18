@@ -214,11 +214,80 @@ class QccApiService {
     return this.callServer('operation', 'get_qualifications', { searchKey: companyName })
   }
 
+  // 获取对外投资
+  async getExternalInvestments(companyName) {
+    return this.callServer('company', 'get_external_investments', { searchKey: companyName })
+  }
+
+  // 获取变更记录
+  async getChangeRecords(companyName) {
+    return this.callServer('company', 'get_change_records', { searchKey: companyName })
+  }
+
+  // 获取裁判文书
+  async getJudicialDocuments(companyName) {
+    return this.callServer('risk', 'get_judicial_documents', { searchKey: companyName })
+  }
+
+  // 获取开庭公告
+  async getHearingNotice(companyName) {
+    return this.callServer('risk', 'get_hearing_notice', { searchKey: companyName })
+  }
+
+  // 获取软件著作权
+  async getSoftwareCopyright(companyName) {
+    return this.callServer('ipr', 'get_software_copyright_info', { searchKey: companyName })
+  }
+
+  // 获取信用评价
+  async getCreditEvaluation(companyName) {
+    return this.callServer('operation', 'get_credit_evaluation', { searchKey: companyName })
+  }
+
+  // 获取招聘信息
+  async getRecruitmentInfo(companyName) {
+    return this.callServer('operation', 'get_recruitment_info', { searchKey: companyName })
+  }
+
+  // 获取新闻舆情
+  async getNewsSentiment(companyName) {
+    return this.callServer('operation', 'get_news_sentiment', { searchKey: companyName })
+  }
+
+  // 获取行政许可
+  async getAdministrativeLicense(companyName) {
+    return this.callServer('operation', 'get_administrative_license', { searchKey: companyName })
+  }
+
+  // 获取被执行人信息
+  async getJudgmentDebtorInfo(companyName) {
+    return this.callServer('risk', 'get_judgment_debtor_info', { searchKey: companyName })
+  }
+
+  // 获取限制高消费
+  async getHighConsumptionRestriction(companyName) {
+    return this.callServer('risk', 'get_high_consumption_restriction', { searchKey: companyName })
+  }
+
+  // 获取股权冻结
+  async getEquityFreeze(companyName) {
+    return this.callServer('risk', 'get_equity_freeze', { searchKey: companyName })
+  }
+
+  // 获取税务异常
+  async getTaxAbnormal(companyName) {
+    return this.callServer('risk', 'get_tax_abnormal', { searchKey: companyName })
+  }
+
   // 并行获取所有公司信息
   async getAllCompanyData(companyName) {
-    const [companyInfo, shareholderInfo, keyPersonnel, actualController,
-           dishonestInfo, caseFilingInfo, businessException, administrativePenalty,
-           patentInfo, trademarkInfo, biddingInfo, qualifications] = await Promise.all([
+    const [
+      companyInfo, shareholderInfo, keyPersonnel, actualController,
+      dishonestInfo, caseFilingInfo, businessException, administrativePenalty,
+      patentInfo, trademarkInfo, biddingInfo, qualifications,
+      externalInvestments, changeRecords, judicialDocuments, softwareCopyright,
+      creditEvaluation, recruitmentInfo, judgmentDebtorInfo, equityFreeze
+    ] = await Promise.all([
       this.getCompanyInfo(companyName),
       this.getShareholderInfo(companyName),
       this.getKeyPersonnel(companyName),
@@ -231,6 +300,14 @@ class QccApiService {
       this.getTrademarkInfo(companyName),
       this.getBiddingInfo(companyName),
       this.getQualifications(companyName),
+      this.getExternalInvestments(companyName),
+      this.getChangeRecords(companyName),
+      this.getJudicialDocuments(companyName),
+      this.getSoftwareCopyright(companyName),
+      this.getCreditEvaluation(companyName),
+      this.getRecruitmentInfo(companyName),
+      this.getJudgmentDebtorInfo(companyName),
+      this.getEquityFreeze(companyName),
     ])
 
     return {
@@ -246,6 +323,14 @@ class QccApiService {
       trademarkInfo,
       biddingInfo,
       qualifications,
+      externalInvestments,
+      changeRecords,
+      judicialDocuments,
+      softwareCopyright,
+      creditEvaluation,
+      recruitmentInfo,
+      judgmentDebtorInfo,
+      equityFreeze,
     }
   }
 }

@@ -442,20 +442,42 @@ export const dcfTemplate = {
 
 // 精简后的DD清单 - 仅保留企查查MCP支持自动填充的项目
 export const ddChecklist = {
-  法务: [
+  公司概况: [
+    '公司基本信息',
     '股权结构',
+    '对外投资',
+    '变更记录',
+  ],
+  法务: [
     '知识产权证明',
     '诉讼记录',
+    '司法风险',
   ],
   技术: [
     '技术专利清单',
+    '软件著作权',
+  ],
+  经营: [
+    '招投标情况',
+    '资质证书',
+    '信用评价',
+    '招聘信息',
   ],
 }
 
 // DD清单项目与企查查MCP工具的映射
 export const ddChecklistMapping = {
+  '公司基本信息': { server: 'company', tool: 'get_company_info', field: '公司信息' },
   '股权结构': { server: 'company', tool: 'get_shareholder_info', field: '股东信息' },
+  '对外投资': { server: 'company', tool: 'get_external_investments', field: '对外投资信息' },
+  '变更记录': { server: 'company', tool: 'get_change_records', field: '变更记录' },
   '知识产权证明': { server: 'ipr', tool: 'get_patent_info', field: '专利信息' },
   '诉讼记录': { server: 'risk', tool: 'get_case_filing_info', field: '立案信息' },
+  '司法风险': { server: 'risk', tool: 'get_judicial_documents', field: '裁判文书' },
   '技术专利清单': { server: 'ipr', tool: 'get_patent_info', field: '专利信息' },
+  '软件著作权': { server: 'ipr', tool: 'get_software_copyright_info', field: '软件著作权' },
+  '招投标情况': { server: 'operation', tool: 'get_bidding_info', field: '招投标信息' },
+  '资质证书': { server: 'operation', tool: 'get_qualifications', field: '资质证书信息' },
+  '信用评价': { server: 'operation', tool: 'get_credit_evaluation', field: '信用评价' },
+  '招聘信息': { server: 'operation', tool: 'get_recruitment_info', field: '招聘信息' },
 }
