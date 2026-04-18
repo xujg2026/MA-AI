@@ -4,7 +4,8 @@
  */
 
 const QCC_API_CONFIG = {
-  baseUrl: 'https://agent.qcc.com/mcp',
+  // 使用 Vite 代理路径
+  baseUrl: '/qcc-api/mcp',
   servers: {
     company: '/company/stream',
     risk: '/risk/stream',
