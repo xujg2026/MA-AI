@@ -33,29 +33,16 @@ class QccApiService {
     console.log(`[QCC API] 请求 ${serverType}: ${query}`)
     console.log(`[QCC API] URL: ${url}`)
 
-    // 企查查MCP API 使用 JSON-RPC 2.0 格式
-    // 尝试使用数组参数格式
-    const methodMap = {
-      company: 'getCompanyInfo',
-      risk: 'getRiskInfo',
-      ipr: 'getIPRInfo',
-      operation: 'getOperationInfo',
-    }
+    // 企查查MCP API 使用简单对象格式
+    const requestBody = { query: query }
 
-    const jsonrpcRequest = {
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'query',
-      params: [query],
-    }
-
-    console.log(`[QCC API] 请求体:`, JSON.stringify(jsonrpcRequest))
+    console.log(`[QCC API] 请求体:`, JSON.stringify(requestBody))
 
     try {
       const response = await fetch(url, {
         method: 'POST',
         headers: this.getHeaders(),
-        body: JSON.stringify(jsonrpcRequest),
+        body: JSON.stringify(requestBody),
       })
 
       console.log(`[QCC API] 响应状态: ${response.status}`)
