@@ -1,0 +1,175 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const dataPath = path.join(__dirname, '../../data');
+
+let db = {
+  news: [],
+  crawl_tasks: [],
+  video_tasks: []
+};
+
+function ensureDataDir() {
+  if (!fs.existsSync(dataPath)) {
+    fs.mkdirSync(dataPath, { recursive: true });
+  }
+}
+
+export function initDatabase() {
+  ensureDataDir();
+  const dbFile = path.join(dataPath, 'db.json');
+
+  if (fs.existsSync(dbFile)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(dbFile, 'utf-8'));
+      db = data;
+      console.log('Database loaded');
+    } catch (e) {
+      console.log('Creating new database');
+      saveDatabase();
+    }
+  } else {
+    saveDatabase();
+    seedSampleData();
+  }
+}
+
+function saveDatabase() {
+  const dbFile = path.join(dataPath, 'db.json');
+  fs.writeFileSync(dbFile, JSON.stringify(db, null, 2));
+}
+
+function seedSampleData() {
+  db.news = [
+    {
+      id: generateId(),
+      title: '华测检测完成对某环境检测公司收购，拓展环境检测领域布局',
+      summary: '华测检测近日宣布完成对一家华东地区领先的环境检测公司的全资收购，交易金额约2.5亿元。',
+      content: '华测检测认证股份有限公司今日宣布完成对江苏中环检测有限公司100%股权的收购...',
+      source: '华测检测官网',
+      url: 'https://www.cti-cert.com/news/123',
+      publishedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      category: 'ma',
+      tags: ['华测检测', '收购', '环境检测', 'CMA'],
+      sentiment: 'positive',
+      videoGenerated: false,
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: generateId(),
+      title: '市场监管总局发布《检验检测机构监督管理办法》',
+      summary: '为加强检验检测机构监督管理，市场监管总局近日发布新办法...',
+      content: '国家市场监督管理总局于近日正式发布《检验检测机构监督管理办法》...',
+      source: '国家市场监督管理总局',
+      url: 'https://www.samr.gov.cn/tzgg/456',
+      publishedAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+      category: 'policy',
+      tags: ['政策', '监管', '资质认定', 'CMA'],
+      sentiment: 'neutral',
+      videoGenerated: false,
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: generateId(),
+      title: '广电计量发布2024年业绩预告，净利润同比增长15%-25%',
+      summary: '广电计量预计2024年年度实现归属于上市公司股东的净利润2.8亿元-3.1亿元...',
+      content: '广州广电计量检测股份有限公司发布2024年年度业绩预告...',
+      source: '广电计量公告',
+      url: 'https://www.grgtest.com/investor/789',
+      publishedAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
+      category: 'company',
+      tags: ['广电计量', '业绩', '年报', '第三方检测'],
+      sentiment: 'positive',
+      videoGenerated: false,
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: generateId(),
+      title: '中国汽研拟收购某新能源汽车检测中心',
+      summary: '中国汽车工程研究院股份有限公司公告称，拟收购一家位于深圳的新能源汽车检测中心...',
+      content: '中国汽研今日发布公告，公司拟以现金方式收购深圳新能源汽车检测中心有限公司70%股权...',
+      source: '中国汽研公告',
+      url: 'https://www.caeri.com.cn/investor/456',
+      publishedAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
+      category: 'ma',
+      tags: ['中国汽研', '收购', '新能源', '汽车检测'],
+      sentiment: 'positive',
+      videoGenerated: false,
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: generateId(),
+      title: '认监委开展2024年度CCC认证有效性抽查',
+      summary: '国家认监委启动2024年度强制性产品认证有效性抽查工作...',
+      content: '国家认证认可监督管理委员会发布通知，决定开展2024年度强制性产品认证（CCC）有效性抽查工作...',
+      source: '国家认监委',
+      url: 'https://www.cnca.gov.cn/notice/123',
+      publishedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      category: 'policy',
+      tags: ['CCC', '认证', '监督抽查', '认监委'],
+      sentiment: 'neutral',
+      videoGenerated: false,
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: generateId(),
+      title: '谱尼测试旗下实验室通过FDA现场审核',
+      summary: '谱尼测试集团宣布其北京实验室已通过美国FDA现场审核...',
+      content: '谱尼测试集团官方宣布，其北京实验室近日成功通过美国食品药品监督管理局（FDA）的现场审核...',
+      source: '谱尼测试官网',
+      url: 'https://www.ponytest.com/news/234',
+      publishedAt: new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString(),
+      category: 'company',
+      tags: ['谱尼测试', 'FDA', '国际认证', '实验室'],
+      sentiment: 'positive',
+      videoGenerated: false,
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: generateId(),
+      title: '国际检测巨头BV集团完成对某TIC公司收购',
+      summary: '法国必维国际检验集团宣布完成对一家亚太区检测公司的收购...',
+      content: 'Bureau Veritas（必维国际检验集团）今日宣布已完成对新加坡Quality Assurance Testing Services的收购...',
+      source: 'Bureau Veritas',
+      url: 'https://www.bureauveritas.com/news/567',
+      publishedAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+      category: 'ma',
+      tags: ['BV', '收购', '国际', 'TIC'],
+      sentiment: 'positive',
+      videoGenerated: false,
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: generateId(),
+      title: '国检集团发布数字化转型战略，打造智慧检测平台',
+      summary: '国检集团发布未来五年数字化转型战略，计划投入5亿元打造智慧检测云平台...',
+      content: '中国建材检验认证集团股份有限公司正式发布"数智国检"战略规划...',
+      source: '国检集团',
+      url: 'https://www.ctcjl.com.cn/news/345',
+      publishedAt: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
+      category: 'company',
+      tags: ['国检集团', '数字化', '智慧检测', '战略'],
+      sentiment: 'positive',
+      videoGenerated: false,
+      createdAt: new Date().toISOString()
+    }
+  ];
+
+  saveDatabase();
+  console.log('Seeded sample data');
+}
+
+export function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
+
+export function getDb() {
+  return db;
+}
+
+export function saveDb() {
+  saveDatabase();
+}

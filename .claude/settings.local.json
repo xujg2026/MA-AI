@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:www.google.com)",
+      "WebFetch(domain:www.nikkei.com)",
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(curl -s \"http://localhost:5173/ai-finder\")",
+      "Bash(npm run:*)",
+      "Bash(pkill -f \"vite\")",
+      "Bash(npm install:*)"
+    ]
+  }
+}
