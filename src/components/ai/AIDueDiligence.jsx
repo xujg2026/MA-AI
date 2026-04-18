@@ -854,9 +854,22 @@ export default function AIDueDiligence() {
                               <div className="max-h-48 overflow-y-auto space-y-1">
                                 {patents.slice(0, 10).map((p, i) => (
                                   <div key={i} className="text-xs p-2 bg-gray-50 rounded">
-                                    <div className="font-medium">{p.发明名称}</div>
-                                    <div className="text-gray-500">
-                                      {p.申请号} | {p.专利类型} | {p.申请日期}
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex-1">
+                                        <div className="font-medium">{p.发明名称}</div>
+                                        <div className="text-gray-500">
+                                          {p.申请号} | {p.专利类型} | {p.申请日期}
+                                        </div>
+                                      </div>
+                                      <a
+                                        href={`https://ai.qcc.com/patent/${p.申请号}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="ml-2 text-primary hover:underline text-xs whitespace-nowrap"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        查看详情 →
+                                      </a>
                                     </div>
                                   </div>
                                 ))}
@@ -873,12 +886,25 @@ export default function AIDueDiligence() {
                               <div className="max-h-48 overflow-y-auto space-y-1">
                                 {cases.slice(0, 10).map((c, i) => (
                                   <div key={i} className="text-xs p-2 bg-gray-50 rounded">
-                                    <div className="font-medium">{c.案号}</div>
-                                    <div className="text-gray-500">
-                                      {c.案由} | {c.立案日期} | {c.法院}
-                                    </div>
-                                    <div className="text-gray-400">
-                                      {c.当事人 ? `原告: ${c.当事人.原告?.join(', ') || '-'} | 被告: ${c.当事人.被告?.join(', ') || '-'}` : ''}
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex-1">
+                                        <div className="font-medium">{c.案号}</div>
+                                        <div className="text-gray-500">
+                                          {c.案由} | {c.立案日期} | {c.法院}
+                                        </div>
+                                        <div className="text-gray-400">
+                                          {c.当事人 ? `原告: ${c.当事人.原告?.join(', ') || '-'} | 被告: ${c.当事人.被告?.join(', ') || '-'}` : ''}
+                                        </div>
+                                      </div>
+                                      <a
+                                        href={`https://ai.qcc.com/case/${encodeURIComponent(c.案号)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="ml-2 text-primary hover:underline text-xs whitespace-nowrap"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        查看详情 →
+                                      </a>
                                     </div>
                                   </div>
                                 ))}
