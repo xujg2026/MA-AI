@@ -23,7 +23,7 @@ class QccApiService {
     return {
       'Authorization': `Bearer ${this.apiKey}`,
       'Content-Type': 'application/json',
-      'Accept': 'application/json',
+      'Accept': 'text/event-stream, application/json',
     }
   }
 
@@ -34,7 +34,7 @@ class QccApiService {
     console.log(`[QCC API] URL: ${url}`)
 
     // 企查查MCP API 使用 JSON-RPC 2.0 格式
-    // method 字段可能是具体的工具名称
+    // 尝试使用数组参数格式
     const methodMap = {
       company: 'getCompanyInfo',
       risk: 'getRiskInfo',
@@ -45,10 +45,8 @@ class QccApiService {
     const jsonrpcRequest = {
       jsonrpc: '2.0',
       id: 1,
-      method: methodMap[serverType] || 'query',
-      params: {
-        query: query,
-      },
+      method: 'query',
+      params: [query],
     }
 
     console.log(`[QCC API] 请求体:`, JSON.stringify(jsonrpcRequest))

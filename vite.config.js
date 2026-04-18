@@ -11,8 +11,9 @@ export default defineConfig({
         target: 'https://agent.qcc.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/qcc-api/, ''),
-        // 不验证 SSL 证书
         secure: false,
+        // 确保POST请求body被正确转发
+        selfHandleResponse: false,
       },
     },
   },
