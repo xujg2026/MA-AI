@@ -1,6 +1,6 @@
 /**
  * 企查查 API 服务
- * 基于企查查智能体数据平台 MCP API
+ * 基于企查查智能体数据平台 API
  */
 
 const QCC_API_CONFIG = {
@@ -16,18 +16,21 @@ const QCC_API_CONFIG = {
 class QccApiService {
   constructor(apiKey) {
     this.apiKey = apiKey
-    this.session = null
   }
 
   getHeaders() {
     return {
       'Authorization': `Bearer ${this.apiKey}`,
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
     }
   }
 
   async callServer(serverType, query) {
     const url = `${QCC_API_CONFIG.baseUrl}${QCC_API_CONFIG.servers[serverType]}`
+
+    console.log(`[QCC API] 请求 ${serverType}: ${query}`)
+    console.log(`[QCC API] URL: ${url}`)
 
     try {
       const response = await fetch(url, {
@@ -36,46 +39,103 @@ class QccApiService {
         body: JSON.stringify({ query }),
       })
 
+      console.log(`[QCC API] 响应状态: ${response.status}`)
+
       if (!response.ok) {
         const errorText = await response.text()
+        console.log(`[QCC API] 错误响应: ${errorText}`)
+
+        // 检查是否是 CORS 错误
+        if (response.type === 'opaque' || response.status === 0) {
+          return { error: 'CORS错误: API不支持跨域请求，请通过后端代理访问' }
+        }
+
         return { error: `API错误 ${response.status}: ${errorText}` }
       }
 
-      // 解析 SSE 流式响应
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let result = ''
+      // 获取响应文本
+      const responseText = await response.text()
+      console.log(`[QCC API] 原始响应长度: ${responseText.length}`)
+      console.log(`[QCC API] 原始响应: ${responseText.substring(0, 500)}...`)
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+      // 尝试解析为 JSON
+      try {
+        const jsonData = JSON.parse(responseText)
+        console.log(`[QCC API] 解析成功:`, jsonData)
+        return jsonData
+      } catch (parseError) {
+        // 如果不是 JSON，尝试解析 SSE 格式
+        console.log(`[QCC API] 尝试解析 SSE 格式...`)
+        return this.parseSSEResponse(responseText)
+      }
 
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n')
+    } catch (error) {
+      console.error(`[QCC API] 请求异常:`, error)
 
-        for (const line of lines) {
-          if (line.startsWith('data:')) {
-            try {
-              const jsonData = JSON.parse(line.slice(5))
-              if (jsonData.event === 'error' || jsonData.error) {
-                return { error: jsonData.message || jsonData.error }
-              }
-              if (jsonData.event === 'end') {
-                return result ? JSON.parse(result) : { error: '无数据返回' }
-              }
-              if (jsonData.data) {
-                result = typeof jsonData.data === 'string' ? jsonData.data : JSON.stringify(jsonData.data)
-              }
-            } catch (e) {
-              // 继续处理下一行
+      // 检测 CORS 错误
+      if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
+        return { error: 'CORS错误或网络问题: API不支持跨域请求，需要后端代理' }
+      }
+
+      return { error: `请求失败: ${error.message}` }
+    }
+  }
+
+  parseSSEResponse(text) {
+    const lines = text.split('\n')
+    let result = ''
+    let error = null
+
+    for (const line of lines) {
+      const trimmedLine = line.trim()
+      if (!trimmedLine) continue
+
+      if (trimmedLine.startsWith('data:')) {
+        const dataStr = trimmedLine.slice(5).trim()
+        try {
+          const jsonData = JSON.parse(dataStr)
+
+          if (jsonData.event === 'error' || jsonData.error) {
+            error = jsonData.message || jsonData.error
+            continue
+          }
+
+          if (jsonData.event === 'end') {
+            break
+          }
+
+          if (jsonData.data) {
+            if (typeof jsonData.data === 'string') {
+              result = jsonData.data
+            } else {
+              result = JSON.stringify(jsonData.data)
             }
+          } else {
+            // 直接返回数据对象
+            result = dataStr
+          }
+        } catch (e) {
+          // 如果解析失败，保存原始数据
+          if (!result) {
+            result = dataStr
           }
         }
       }
+    }
 
-      return result ? JSON.parse(result) : { error: '无数据返回' }
-    } catch (error) {
-      return { error: `请求失败: ${error.message}` }
+    if (error) {
+      return { error }
+    }
+
+    if (!result) {
+      return { error: '无数据返回' }
+    }
+
+    // 尝试解析结果为 JSON
+    try {
+      return JSON.parse(result)
+    } catch (e) {
+      return { data: result }
     }
   }
 

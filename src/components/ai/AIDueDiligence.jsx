@@ -108,6 +108,26 @@ export default function AIDueDiligence({ onComplete }) {
   const overall = getOverallProgress()
   const progressPercent = overall.total > 0 ? Math.round((overall.checked / overall.total) * 100) : 0
 
+  // 测试API连接
+  const testApiConnection = async () => {
+    console.log('测试API连接...')
+    setQccApiKey(QCC_API_KEY)
+    const qccApi = getQccApi()
+
+    if (!qccApi) {
+      console.error('API服务初始化失败')
+      return
+    }
+
+    try {
+      // 测试一个简单的查询
+      const result = await qccApi.getCompanyInfo('测试公司')
+      console.log('API测试结果:', result)
+    } catch (error) {
+      console.error('API测试异常:', error)
+    }
+  }
+
   // 使用企查查API进行风险分析
   const runRiskAnalysis = async () => {
     if (!selectedCompany.trim()) return
@@ -115,21 +135,28 @@ export default function AIDueDiligence({ onComplete }) {
     setIsAnalyzing(true)
     setQccError(null)
     setCompanyInfo(null)
+    setAnalysisResult(null)
+
+    // 先测试API连接
+    console.log('开始企查查API调用...')
+    setQccApiKey(QCC_API_KEY)
+    const qccApi = getQccApi()
+
+    if (!qccApi) {
+      setQccError('企查查API服务初始化失败')
+      setIsAnalyzing(false)
+      return
+    }
 
     try {
-      // 设置API Key
-      setQccApiKey(QCC_API_KEY)
-      const qccApi = getQccApi()
+      // 串行获取数据以便更好地调试
+      console.log('获取公司信息:', selectedCompany)
+      const companyData = await qccApi.getCompanyInfo(selectedCompany)
+      console.log('公司信息返回:', companyData)
 
-      if (!qccApi) {
-        throw new Error('企查查API服务初始化失败')
-      }
-
-      // 并行获取公司信息和风险数据
-      const [companyData, riskData] = await Promise.all([
-        qccApi.getCompanyInfo(selectedCompany),
-        qccApi.getRiskInfo(selectedCompany),
-      ])
+      console.log('获取风险信息:', selectedCompany)
+      const riskData = await qccApi.getRiskInfo(selectedCompany)
+      console.log('风险信息返回:', riskData)
 
       // 处理公司基本信息
       let basicInfo = null
@@ -148,6 +175,8 @@ export default function AIDueDiligence({ onComplete }) {
           address: data.Address || '-',
         }
         setCompanyInfo(basicInfo)
+      } else if (companyData.error) {
+        console.log('公司信息获取失败:', companyData.error)
       }
 
       // 处理风险数据
@@ -210,13 +239,28 @@ export default function AIDueDiligence({ onComplete }) {
 
         setAnalysisResult(riskResult)
       } else {
-        // API调用失败，使用模拟数据
-        setQccError(riskData.error || '获取风险数据失败，使用本地数据')
+        // API调用失败
+        const errorMsg = riskData.error || companyData.error || '获取数据失败'
+        console.log('API错误:', errorMsg)
+
+        if (errorMsg.includes('CORS')) {
+          setQccError(`${errorMsg}。请通过后端代理访问企查查API。`)
+        } else {
+          setQccError(`${errorMsg}。将使用本地模拟数据。`)
+        }
+
+        // 使用模拟数据作为后备
         setAnalysisResult(riskAnalysisData)
       }
     } catch (error) {
       console.error('企查查API调用失败:', error)
-      setQccError(`API调用失败: ${error.message}，使用本地数据`)
+
+      let errorMessage = error.message || '未知错误'
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        errorMessage = 'CORS错误或网络问题: API不支持跨域请求，需要后端代理'
+      }
+
+      setQccError(`API调用失败: ${errorMessage}，使用本地数据`)
       // 使用模拟数据作为后备
       setAnalysisResult(riskAnalysisData)
     }
