@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { generateSampleReportData, ddReportStructure } from '../../data/ddReportTemplate'
-import { getQccApi, setQccApiKey } from '../../services/qccApi'
+import { getApi } from '../../services/api'
 import {
   FileText,
   Download,
@@ -19,9 +19,6 @@ import {
   Sparkles,
   Shield,
 } from 'lucide-react'
-
-// 企查查 API Key
-const QCC_API_KEY = 'MohHnWYT7LapgQkP1OGpVHpyS1gLZo2kMkgjvNZoTj5QcvS7'
 
 export default function DDReportGenerator({ onComplete }) {
   const [companyName, setCompanyName] = useState('')
@@ -43,33 +40,24 @@ export default function DDReportGenerator({ onComplete }) {
     setGeneratingStep('正在连接企查查数据平台...')
 
     try {
-      // 设置API Key并获取API实例
-      setQccApiKey(QCC_API_KEY)
-      const qccApi = getQccApi()
+      const api = getApi()
 
-      if (!qccApi) {
-        throw new Error('企查查API服务初始化失败')
+      setGeneratingStep('正在获取企业情报数据...')
+      const response = await api.getQccCompanyIntelligence(companyName)
+
+      if (!response.success || !response.data) {
+        throw new Error(response.error || '企查查数据获取失败')
       }
-
-      // 并行获取所有企查查数据
-      setGeneratingStep('正在获取企业工商信息...')
-      const [companyInfo, riskInfo, iprInfo, operationInfo] = await Promise.all([
-        qccApi.getCompanyInfo(companyName),
-        qccApi.getRiskInfo(companyName),
-        qccApi.getIPRInfo(companyName),
-        qccApi.getOperationInfo(companyName),
-      ])
 
       // 处理并整合数据
       setGeneratingStep('正在处理企业数据...')
-      const processedData = processQccData({
-        companyInfo,
-        riskInfo,
-        iprInfo,
-        operationInfo,
-      })
+      const processedData = processQccData(response.data)
 
       setQccData(processedData)
+
+      if (response.partial && response.error) {
+        setQccError(response.error)
+      }
 
       // 生成推荐书数据
       setGeneratingStep('正在生成推荐书...')
@@ -106,99 +94,96 @@ export default function DDReportGenerator({ onComplete }) {
     setGeneratingStep('')
   }
 
-  // 处理企查查返回的数据
-  const processQccData = (qccResult) => {
-    const { companyInfo, riskInfo, iprInfo, operationInfo } = qccResult
-
-    // 处理公司基本信息
-    let basicInfo = {}
-    if (!companyInfo.error && companyInfo) {
-      const data = Array.isArray(companyInfo) ? companyInfo[0] : companyInfo
-      basicInfo = {
-        name: data.Name || companyName,
-        creditCode: data.CreditCode || '-',
-        legalPerson: data.LegalPersonName || '-',
-        registeredCapital: data.RegistCapi || '-',
-        paidCapital: data.RecCap || '-',
-        status: data.Status || '-',
-        startDate: data.StartDate || '-',
-        companyType: data.EconKind || '-',
-        scope: data.Scope || '-',
-        address: data.Address || '-',
-        businessDuration: data.BusinessDuration || '-',
-        employees: data.EmpNum || '-',
+  // 处理后端返回的企业情报数据
+  const processQccData = (allData) => {
+    const hasUsableData = (data) => data && !data.error
+    const hasSearchHit = (data, emptyHints = ['未发现任何', '未发现', '暂无', '空']) => {
+      if (!hasUsableData(data)) return false
+      const text = JSON.stringify(data)
+      return !emptyHints.some((hint) => text.includes(hint))
+    }
+    const getArrayData = (data, keys = []) => {
+      if (!hasUsableData(data)) return []
+      for (const key of keys) {
+        if (Array.isArray(data[key])) {
+          return data[key]
+        }
       }
+      return []
     }
 
-    // 处理风险数据
-    let riskSummary = {
+    const companyInfo = allData?.companyInfo
+    const companyData = Array.isArray(companyInfo) ? companyInfo[0] : companyInfo
+
+    const basicInfo = hasUsableData(companyData)
+      ? {
+          name: companyData.企业名称 || companyData.Name || companyName,
+          creditCode: companyData.统一社会信用代码 || companyData.CreditCode || '-',
+          legalPerson: companyData.法定代表人 || companyData.LegalPersonName || '-',
+          registeredCapital: companyData.注册资本 || companyData.RegistCapi || '-',
+          paidCapital: companyData.实缴资本 || companyData.RecCap || '-',
+          status: companyData.登记状态 || companyData.Status || '-',
+          startDate: companyData.成立日期 || companyData.StartDate || '-',
+          companyType: companyData.企业类型 || companyData.EconKind || '-',
+          scope: companyData.经营范围 || companyData.Scope || '-',
+          address: companyData.注册地址 || companyData.Address || '-',
+          businessDuration: companyData.营业期限 || companyData.BusinessDuration || '-',
+          employees: companyData.参保人数 || companyData.EmpNum || '-',
+        }
+      : {}
+
+    const patentList = getArrayData(allData?.patentInfo, ['专利信息'])
+    const trademarkList = getArrayData(allData?.trademarkInfo, ['商标信息'])
+    const softwareCopyrightList = getArrayData(allData?.softwareCopyright, ['软件著作权信息', '软件著作权'])
+    const qualificationList = getArrayData(allData?.qualifications, ['资质证书信息'])
+    const biddingList = getArrayData(allData?.biddingInfo, ['招投标信息'])
+    const caseList = getArrayData(allData?.caseFilingInfo, ['立案信息'])
+
+    const riskSummary = {
       critical: [],
       high: [],
       medium: [],
       low: [],
       totalScore: 100,
     }
-    if (!riskInfo.error && riskInfo) {
-      const data = typeof riskInfo === 'string' ? JSON.parse(riskInfo) : riskInfo
 
-      if (data.dishonest && data.dishonest > 0) riskSummary.critical.push({ type: '失信记录', count: data.dishonest })
-      if (data.executed && data.executed > 0) riskSummary.critical.push({ type: '被执行', count: data.executed })
-      if (data.bankruptcy && data.bankruptcy > 0) riskSummary.critical.push({ type: '破产记录', count: data.bankruptcy })
-      if (data.equityFreeze && data.equityFreeze > 0) riskSummary.critical.push({ type: '股权冻结', count: data.equityFreeze })
-
-      if (data.businessException && data.businessException > 0) riskSummary.high.push({ type: '经营异常', count: data.businessException })
-      if (data.seriousViolation && data.seriousViolation > 0) riskSummary.high.push({ type: '严重违法', count: data.seriousViolation })
-      if (data.administrativePenalty && data.administrativePenalty > 0) riskSummary.high.push({ type: '行政处罚', count: data.administrativePenalty })
-
-      // 计算风险分数
-      let score = 100
-      score -= riskSummary.critical.length * 20
-      score -= riskSummary.high.length * 10
-      riskSummary.totalScore = Math.max(0, score)
+    if (hasSearchHit(allData?.dishonestInfo)) {
+      riskSummary.critical.push({ type: '失信记录', count: 1 })
+    }
+    if (hasSearchHit(allData?.judgmentDebtorInfo)) {
+      riskSummary.critical.push({ type: '被执行', count: 1 })
+    }
+    if (hasSearchHit(allData?.equityFreeze)) {
+      riskSummary.critical.push({ type: '股权冻结', count: 1 })
+    }
+    if (caseList.length > 0) {
+      riskSummary.high.push({ type: '立案信息', count: caseList.length })
+    }
+    if (hasSearchHit(allData?.businessException)) {
+      riskSummary.high.push({ type: '经营异常', count: 1 })
+    }
+    if (hasSearchHit(allData?.administrativePenalty)) {
+      riskSummary.high.push({ type: '行政处罚', count: 1 })
     }
 
-    // 处理知识产权数据
-    let ipData = {
-      patents: 0,
-      trademarks: 0,
-      softwareCopyrights: 0,
+    let score = 100
+    score -= riskSummary.critical.length * 20
+    score -= riskSummary.high.length * 10
+    riskSummary.totalScore = Math.max(0, score)
+
+    const ipData = {
+      patents: patentList.length,
+      trademarks: trademarkList.length,
+      softwareCopyrights: softwareCopyrightList.length,
       workCopyrights: 0,
-      patentList: [],
-      trademarkList: [],
-    }
-    if (!iprInfo.error && iprInfo) {
-      const data = typeof iprInfo === 'string' ? JSON.parse(iprInfo) : iprInfo
-      if (Array.isArray(data.patents)) {
-        ipData.patents = data.patents.length
-        ipData.patentList = data.patents.slice(0, 5).map(p => p.Title || p.name || '未知专利')
-      }
-      if (Array.isArray(data.trademarks)) {
-        ipData.trademarks = data.trademarks.length
-        ipData.trademarkList = data.trademarks.slice(0, 5).map(t => t.Name || t.name || '未知商标')
-      }
-      if (Array.isArray(data.softwareCopyrights)) {
-        ipData.softwareCopyrights = data.softwareCopyrights.length
-      }
-      if (Array.isArray(data.workCopyrights)) {
-        ipData.workCopyrights = data.workCopyrights.length
-      }
+      patentList: patentList.slice(0, 5).map((item) => item.专利名称 || item.Title || item.name || '未知专利'),
+      trademarkList: trademarkList.slice(0, 5).map((item) => item.商标名称 || item.Name || item.name || '未知商标'),
     }
 
-    // 处理经营数据
-    let operationData = {
-      biddingCount: 0,
-      qualifications: [],
+    const operationData = {
+      biddingCount: biddingList.length,
+      qualifications: qualificationList.slice(0, 5),
       newsCount: 0,
-    }
-    if (!operationInfo.error && operationInfo) {
-      const data = typeof operationInfo === 'string' ? JSON.parse(operationInfo) : operationInfo
-      if (Array.isArray(data.bidding)) {
-        operationData.biddingCount = data.bidding.length
-      }
-      if (Array.isArray(data.qualifications)) {
-        operationData.qualifications = data.qualifications.slice(0, 5)
-      }
-      operationData.newsCount = data.newsCount || 0
     }
 
     return {

@@ -3,7 +3,7 @@
  * 对接 server/src/routes/ 中的所有接口
  */
 
-const API_BASE = '/api'
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
 
 class ApiService {
   constructor() {
@@ -158,6 +158,16 @@ class ApiService {
    */
   batchDiagnose(queries) {
     return this.post('/diagnosis/batch', { queries })
+  }
+
+  // ========== QCC ==========
+
+  /**
+   * 获取企业综合情报数据
+   * POST /api/qcc/company-intelligence
+   */
+  getQccCompanyIntelligence(companyName) {
+    return this.post('/qcc/company-intelligence', { companyName })
   }
 }
 

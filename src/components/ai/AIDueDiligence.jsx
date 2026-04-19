@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ddChecklist } from '../../data/mockData'
-import { getQccApi, setQccApiKey } from '../../services/qccApi'
+import { getApi } from '../../services/api'
 import {
   FileText,
   CheckCircle,
@@ -22,9 +22,6 @@ import {
   MapPin,
 } from 'lucide-react'
 import { Card, Button, Badge } from '../ui'
-
-// 企查查 API Key
-const QCC_API_KEY = 'MohHnWYT7LapgQkP1OGpVHpyS1gLZo2kMkgjvNZoTj5QcvS7'
 
 export default function AIDueDiligence() {
   const [expandedSections, setExpandedSections] = useState(['法务', '技术'])
@@ -116,21 +113,19 @@ export default function AIDueDiligence() {
     setCompanyInfo(null)
     setAnalysisResult(null)
 
-    console.log('开始企查查API调用...')
-    setQccApiKey(QCC_API_KEY)
-    const qccApi = getQccApi()
-
-    if (!qccApi) {
-      setQccError('企查查API服务初始化失败')
-      setIsAnalyzing(false)
-      return
-    }
-
     try {
-      // 并行获取所有数据
-      console.log('并行获取公司数据:', selectedCompany)
-      const allData = await qccApi.getAllCompanyData(selectedCompany)
-      console.log('全部数据返回:', allData)
+      const api = getApi()
+      const response = await api.getQccCompanyIntelligence(selectedCompany)
+
+      if (!response.success || !response.data) {
+        throw new Error(response.error || '企查查数据获取失败')
+      }
+
+      const allData = response.data
+
+      if (response.partial && response.error) {
+        setQccError(response.error)
+      }
 
       // 解析公司基本信息
       const companyData = allData.companyInfo
@@ -404,20 +399,9 @@ export default function AIDueDiligence() {
 
       setAnalysisResult(riskResult)
 
-      // 如果所有API调用都失败
-      if (companyData?.error && !allData.dishonestInfo?.error === false) {
-        setQccError('部分数据获取失败，已展示可用数据')
-      }
-
     } catch (error) {
-      console.error('企查查API调用失败:', error)
-
-      let errorMessage = error.message || '未知错误'
-      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-        errorMessage = 'CORS错误或网络问题: API不支持跨域请求，需要后端代理'
-      }
-
-      setQccError(`API调用失败: ${errorMessage}`)
+      console.error('企业情报接口调用失败:', error)
+      setQccError(`API调用失败: ${error.message || '未知错误'}`)
     }
 
     setIsAnalyzing(false)
