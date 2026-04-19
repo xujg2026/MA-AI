@@ -1,4 +1,4 @@
-import { Search, User, Menu, X, Sparkles, Zap } from 'lucide-react'
+import { Search, Menu, X, Sparkles, Zap } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Button } from '../ui'
@@ -11,12 +11,10 @@ export default function Navbar() {
   const navLinks = [
     { name: '首页', href: '/' },
     { name: 'AI觅售', href: '/ai-finder' },
-    { name: '信息录入', href: '/prospect-entry' },
     { name: 'AI交易', href: '/buyer-matching' },
-    { name: 'AI尽职调查', href: '/ai-due-diligence' },
+    { name: '并购资讯', href: '/news' },
     { name: '案例库', href: '/deals', desc: '既往交易' },
     { name: '数据管理', href: '/data-management' },
-    { name: '并购资讯', href: '/news' },
     { name: '关于我们', href: '/about' },
   ]
 
@@ -38,7 +36,6 @@ export default function Navbar() {
           : 'bg-gradient-to-r from-primary to-secondary py-3'
       }`}
     >
-      {/* Gradient border */}
       <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -58,7 +55,6 @@ export default function Navbar() {
                   scrolled ? 'text-white' : 'text-accent'
                 } group-hover:scale-110 group-hover:rotate-12`}
               />
-              {/* Glow effect */}
               <div className="absolute inset-0 rounded-xl bg-accent/30 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             </div>
             <div className="flex flex-col">
@@ -95,7 +91,6 @@ export default function Navbar() {
                   }`}
                 >
                   {link.name}
-                  {/* Active indicator */}
                   {isActive(link.href) && (
                     <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-accent" />
                   )}

@@ -3,6 +3,7 @@ import AIDueDiligence from '../components/ai/AIDueDiligence'
 import AIValuation from '../components/ai/AIValuation'
 import AIMatchmaker from '../components/ai/AIMatchmaker'
 import DDReportGenerator from '../components/ai/DDReportGenerator'
+import BuyerMatchInputPage from './BuyerMatchInputPage'
 import { FileCheck, DollarSign, Users, FileText, Sparkles, FileSignature, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react'
 import { Card, Badge, Button } from '../components/ui'
 
@@ -67,7 +68,9 @@ export default function BuyerMatchingPage() {
       case 'valuation':
         return <AIValuation onComplete={() => markComplete('valuation')} />
       case 'match':
-        return <AIMatchmaker onComplete={() => markComplete('match')} />
+        return <BuyerMatchInputPage />
+      case 'match-input':
+        return <BuyerMatchInputPage />
       case 'report':
         return <DDReportGenerator onComplete={() => markComplete('report')} />
       default:
