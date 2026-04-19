@@ -12,7 +12,19 @@
 
 代码上，主线是 `src/` 和 `server/`。`tic-intelligence/` 是另一个独立子项目，当前不参与主应用联调。
 
-## 2. 总体架构
+从业务表达上看，这个项目也承接了 “TIC Intelligence Hub” 的一部分定位，即围绕检验检测认证行业的并购资讯、标的分析和 AI 辅助判断，逐步把原型页面和真实数据能力接到同一套主线应用里。
+
+## 2. 业务能力概览
+
+当前主线能力可以概括为：
+
+- AI 尽职调查：围绕企业风险、基础情报和检查清单生成尽调分析结果。
+- 智能匹配：围绕潜在买家与标的的关系做筛选、推荐和流程化展示。
+- 企业估值与分析：页面侧已有入口和原型，部分仍处于未挂路由或 mock 阶段。
+- Buyer Screening：通过规则筛选和 `screening-agent` 做潜在收购方初筛。
+- MX Skills 集成：通过后端调用东方财富相关技能，承接金融搜索、财务数据和诊断类能力。
+
+## 3. 总体架构
 
 ```text
 Browser
@@ -30,7 +42,7 @@ Browser
   - src/data/excelData.js (Zustand 持久化)
 ```
 
-## 3. 主线目录说明
+## 4. 主线目录说明
 
 ```text
 .
@@ -48,7 +60,7 @@ Browser
 └── tic-intelligence/        独立历史/实验子项目
 ```
 
-## 4. 前端页面地图
+## 5. 前端页面地图
 
 | 路由 | 页面文件 | 数据来源 | 当前状态 |
 | --- | --- | --- | --- |
@@ -63,7 +75,7 @@ Browser
 | `/ai-due-diligence` | `src/pages/AIDueDiligencePage.jsx` | `QCC + mock checklist` | 尽调分析/推荐书入口 |
 | `/about` | `src/pages/AboutPage.jsx` | 静态 | 关于页 |
 
-## 5. 后端模块地图
+## 6. 后端模块地图
 
 | 路由/能力 | 文件 | 上游依赖 | 说明 |
 | --- | --- | --- | --- |
@@ -76,7 +88,28 @@ Browser
 | `/api/diagnosis/*` | `server/src/routes/stockDiagnosis.ts` | `stock-diagnosis` | 股票诊断 |
 | `/api/qcc/*` | `server/src/routes/qcc.ts` | `server/src/services/qccApi.ts` | 企查查企业情报 |
 
-## 6. 当前真实状态
+## 7. MX Skills 能力地图
+
+这次远端合入的 `mx-skills/` 目录，提供了 14 个金融数据技能包。主线后端当前已直接使用其中一部分，其余技能仍属于“仓库已纳入、页面和接口待接入”的状态。
+
+| 技能 | 主要用途 | 当前主线使用情况 |
+| --- | --- | --- |
+| `mx-finance-search` | 金融资讯搜索 | 已被搜索/买家画像相关接口使用 |
+| `mx-finance-data` | 金融数据获取 | 已被财务查询、买家画像相关接口使用 |
+| `mx-stocks-screener` | 股票筛选 | 技能已在仓库，主线未直接接入 |
+| `mx-macro-data` | 宏观数据 | 技能已在仓库，主线未直接接入 |
+| `fund-diagnosis` | 基金诊断 | 技能已在仓库，主线未直接接入 |
+| `stock-diagnosis` | 股票诊断 | 已被 `/api/diagnosis/*` 和部分筛选链路使用 |
+| `stock-earnings-review` | 业绩点评 | 技能已在仓库，主线未直接接入 |
+| `stock-market-hotspot-discovery` | 市场热点发现 | 技能已在仓库，主线未直接接入 |
+| `industry-research-report` | 行业研究报告 | 技能已在仓库，主线未直接接入 |
+| `initiation-of-coverage-or-deep-dive` | 深度研究 | 技能已在仓库，主线未直接接入 |
+| `comparable-company-analysis` | 可比公司分析 | 技能已在仓库，主线未直接接入 |
+| `industry-stock-tracker` | 行业股票追踪 | 技能已在仓库，主线未直接接入 |
+| `topic-research-report` | 主题研究报告 | 技能已在仓库，主线未直接接入 |
+| `mx-financial-assistant` | 金融问答助手 | 技能已在仓库，主线未直接接入 |
+
+## 8. 当前真实状态
 
 当前仓库不是一个完全产品化的项目，而是“可演示原型 + 部分真实能力接入”的混合状态。协作时建议先区分下面三类模块：
 
@@ -94,14 +127,14 @@ Browser
   - AI 觅售页
   - 部分交易流程页面的展示数据
 
-## 7. 目前已知的不一致点
+## 9. 目前已知的不一致点
 
 - `src/pages/AIValuationPage.jsx` 和 `src/pages/IntegrationPredictionPage.jsx` 存在，但没有在 `src/App.jsx` 里注册路由。
 - `DashboardPage`、`Footer`、`AICapabilities` 中存在指向 `/ai-valuation` 的入口，但当前路由未挂载。
 - 根目录 `README.md` 在本次整理前是默认 Vite 模板，与真实项目不一致。
 - `server/src/utils/mxSkillRunner.ts` 依赖根目录 `mx-skills/`，仓库本身未包含这部分代码时，相关接口只能失败或降级。
 
-## 8. 主线开发建议
+## 10. 主线开发建议
 
 后续协作优先围绕下面这条链路展开：
 

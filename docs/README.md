@@ -9,6 +9,8 @@
 3. [后端 API 清单](backend-api.md)：联调或新增接口时查这里。
 4. [协作约定](collaboration-guide.md)：做功能前先看变更路径和需要同步更新的文件。
 
+其中 [项目概览](project-overview.md) 里还补充了业务定位、核心能力和 `mx-skills` 能力地图，适合先建立整体认识。
+
 ## 适用场景
 
 - 新成员第一次接手仓库
