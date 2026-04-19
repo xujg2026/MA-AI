@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Building2, DollarSign, Users, TrendingUp, Target, CheckCircle, ChevronRight, Sparkles, Shield, Database, Briefcase, AlertCircle, FileText, Search } from 'lucide-react'
+import { Building2, DollarSign, Users, TrendingUp, Target, CheckCircle, ChevronRight, Sparkles, Shield, Database, Briefcase, AlertCircle, FileText, Search, Loader2 } from 'lucide-react'
 import { Card, Badge, Button, Input } from '../components/ui'
+import { getApi } from '../services/api'
 
 // 买家梯队数据
 const buyerTiers = [
@@ -81,6 +82,7 @@ function Crown({ size = 24, className }) {
 export default function BuyerMatchInputPage() {
   const [isLoaded, setIsLoaded] = useState(false)
   const [step, setStep] = useState(1) // 1: 输入信息, 2: 匹配结果
+  const [isMatching, setIsMatching] = useState(false)
   const [formData, setFormData] = useState({
     companyName: '',
     industry: '',
@@ -113,15 +115,61 @@ export default function BuyerMatchInputPage() {
   }
 
   // 执行匹配
-  const handleMatch = () => {
-    const matchScore = calculateMatch()
-    setMatchResult({
-      score: matchScore,
-      tiers: buyerTiers,
-      formData,
-      recommendedTier: matchScore > 80 ? 1 : matchScore > 60 ? 2 : 3,
-    })
-    setStep(2)
+  const handleMatch = async () => {
+    setIsMatching(true)
+    try {
+      const api = getApi()
+
+      // 并行调用买家画像和筛选接口
+      const [profileRes, screenRes] = await Promise.all([
+        api.getBuyerProfile(formData.companyName),
+        api.screenBuyers({
+          companyName: formData.companyName,
+          industry: formData.industry,
+          region: formData.location,
+          valuation: formData.equity,
+          mainCerts: formData.hasQualification ? ['CMA', 'CNAS'] : [],
+          limit: 20,
+        }),
+      ])
+
+      // 计算综合匹配度
+      let score = 70
+      if (formData.revenue > 10000) score += 10
+      if (formData.netProfit > 1000) score += 10
+      if (formData.hasQualification) score += 5
+      if (formData.hasTechAdvantage) score += 5
+      score = Math.min(100, score)
+
+      const result = {
+        score,
+        tiers: buyerTiers,
+        formData,
+        recommendedTier: score > 80 ? 1 : score > 60 ? 2 : 3,
+        // 来自真实 API 的数据
+        apiData: {
+          profile: profileRes.success ? profileRes.data : null,
+          candidates: screenRes.success ? screenRes.data?.candidates || [] : [],
+          totalCount: screenRes.success ? screenRes.data?.totalCount || 0 : 0,
+        },
+      }
+
+      setMatchResult(result)
+    } catch (err) {
+      console.error('[BuyerMatch] 匹配失败:', err)
+      // API 失败时降级到本地计算
+      const matchScore = calculateMatch()
+      setMatchResult({
+        score: matchScore,
+        tiers: buyerTiers,
+        formData,
+        recommendedTier: matchScore > 80 ? 1 : matchScore > 60 ? 2 : 3,
+        apiData: null,
+      })
+    } finally {
+      setIsMatching(false)
+      setStep(2)
+    }
   }
 
   // 重置
@@ -287,11 +335,11 @@ export default function BuyerMatchInputPage() {
                 <Button
                   variant="primary"
                   onClick={handleMatch}
-                  disabled={!formData.companyName || !formData.industry}
-                  icon={Search}
+                  disabled={!formData.companyName || !formData.industry || isMatching}
+                  icon={isMatching ? Loader2 : Search}
                   iconPosition="right"
                 >
-                  开始匹配买家
+                  {isMatching ? '匹配中...' : '开始匹配买家'}
                 </Button>
               </div>
             </Card>
@@ -399,6 +447,44 @@ export default function BuyerMatchInputPage() {
                 )
               })}
             </div>
+
+            {/* 真实候选买家列表（来自后端 API） */}
+            {matchResult?.apiData?.candidates?.length > 0 && (
+              <Card padding="lg" className="mt-8">
+                <div className="flex items-center gap-2 mb-4">
+                  <Sparkles size={20} className="text-primary" />
+                  <h3 className="text-lg font-bold text-gray-900">AI 推荐候选买家</h3>
+                  <Badge variant="primary">{matchResult.apiData.totalCount} 家</Badge>
+                </div>
+                <div className="space-y-3">
+                  {matchResult.apiData.candidates.slice(0, 6).map((candidate, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-primary/20 to-secondary/20 rounded-lg flex items-center justify-center">
+                          <Building2 size={18} className="text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{candidate.companyName}</p>
+                          <p className="text-xs text-gray-500">
+                            {candidate.industry} | {candidate.region} | 注册资本 {candidate.registeredCapital}万
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <Badge variant={candidate.matchScore >= 80 ? 'success' : candidate.matchScore >= 60 ? 'primary' : 'outline'}>
+                          {candidate.matchScore}分
+                        </Badge>
+                        {candidate.matchReasons?.length > 0 && (
+                          <p className="text-xs text-gray-500 mt-1 max-w-xs text-right">
+                            {candidate.matchReasons[0]}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
 
             {/* 交易建议 */}
             <Card padding="lg" className="mt-8 bg-gradient-to-r from-purple-50 to-blue-50">

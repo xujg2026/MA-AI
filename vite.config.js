@@ -12,6 +12,10 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/qcc-api/, ''),
         secure: false,
       },
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
     },
   },
 })
