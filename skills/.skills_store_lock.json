@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "tushare-pro": {
+      "name": "Tushare Pro A股数据",
+      "zip_url": "https://lightmake.site/api/v1/download?slug=tushare-pro",
+      "source": "skillhub",
+      "version": "1.0.0"
+    },
+    "multi-search-engine": {
+      "name": "Multi Search Engine",
+      "zip_url": "https://lightmake.site/api/v1/download?slug=multi-search-engine",
+      "source": "skillhub",
+      "version": "2.0.1"
+    },
+    "self-improving-agent": {
+      "name": "self-improving-agent",
+      "zip_url": "https://lightmake.site/api/v1/download?slug=self-improving-agent",
+      "source": "skillhub",
+      "version": "1.0.11"
+    }
+  }
+}

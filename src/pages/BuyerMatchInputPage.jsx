@@ -3,73 +3,64 @@ import { Building2, DollarSign, Users, TrendingUp, Target, CheckCircle, ChevronR
 import { Card, Badge, Button, Input } from '../components/ui'
 import { getApi } from '../services/api'
 
-// 买家梯队数据
-const buyerTiers = [
+// 梯队配置（视觉与文案模板）
+const TIER_CONFIGS = [
   {
-    tier: 1,
-    name: '第一梯队',
-    subtitle: '最优匹配',
-    color: 'from-green-500 to-emerald-500',
-    bgColor: 'bg-green-50',
-    borderColor: 'border-green-200',
-    icon: Crown,
-    buyers: [
-      { name: '同行业头部上市企业', desc: '横向整合补短板，强化龙头地位' },
-      { name: '上下游关联行业龙头', desc: '纵向一体化布局，降低供应链成本' },
-      { name: '国际行业巨头', desc: '抢占本土市场，快速切入' },
-    ],
-    coreMotivation: '协同价值最大化，业绩增量提升',
-    matchScore: 95,
+    tier: 1, name: '第一梯队', subtitle: '最优匹配',
+    color: 'from-green-500 to-emerald-500', bgColor: 'bg-green-50', borderColor: 'border-green-200',
+    icon: Crown, coreMotivation: '协同价值最大化，业绩增量提升', matchScore: 95,
   },
   {
-    tier: 2,
-    name: '第二梯队',
-    subtitle: '次优匹配',
-    color: 'from-blue-500 to-cyan-500',
-    bgColor: 'bg-blue-50',
-    borderColor: 'border-blue-200',
-    icon: Briefcase,
-    buyers: [
-      { name: '细分赛道龙头企业', desc: '同行整合扩大市场' },
-      { name: '行业专项并购基金', desc: '财务投资，IPO/并购退出' },
-      { name: '地方国资产业平台', desc: '区域产业布局，保值增值' },
-    ],
-    coreMotivation: '资金保障稳定，落地效率高',
-    matchScore: 80,
+    tier: 2, name: '第二梯队', subtitle: '次优匹配',
+    color: 'from-blue-500 to-cyan-500', bgColor: 'bg-blue-50', borderColor: 'border-blue-200',
+    icon: Briefcase, coreMotivation: '资金保障稳定，落地效率高', matchScore: 80,
   },
   {
-    tier: 3,
-    name: '第三梯队',
-    subtitle: '潜在买家',
-    color: 'from-orange-500 to-amber-500',
-    bgColor: 'bg-orange-50',
-    borderColor: 'border-orange-200',
-    icon: AlertCircle,
-    buyers: [
-      { name: '跨界转型上市公司', desc: '快速切入新赛道' },
-      { name: '大型综合投资集团', desc: '多元化布局分散风险' },
-      { name: '央企/国企产业平台', desc: '丰富业务结构，补充短板' },
-    ],
-    coreMotivation: '战略布局需求，需谨慎评估',
-    matchScore: 60,
+    tier: 3, name: '第三梯队', subtitle: '潜在买家',
+    color: 'from-orange-500 to-amber-500', bgColor: 'bg-orange-50', borderColor: 'border-orange-200',
+    icon: AlertCircle, coreMotivation: '战略布局需求，需谨慎评估', matchScore: 60,
   },
   {
-    tier: 4,
-    name: '第四梯队',
-    subtitle: '排除名单',
-    color: 'from-red-500 to-rose-500',
-    bgColor: 'bg-red-50',
-    borderColor: 'border-red-200',
-    icon: Shield,
-    buyers: [
-      { name: '小型财务PE/个人资本', desc: '资金不足，排除' },
-      { name: '亏损/经营困难企业', desc: '无收购能力，排除' },
-      { name: '非关联行业机构', desc: '无协同，仅投机，排除' },
-    ],
-    coreMotivation: '风险较高，不建议对接',
-    matchScore: 30,
+    tier: 4, name: '第四梯队', subtitle: '排除名单',
+    color: 'from-red-500 to-rose-500', bgColor: 'bg-red-50', borderColor: 'border-red-200',
+    icon: Shield, coreMotivation: '风险较高，不建议对接', matchScore: 30,
   },
 ]
+
+// 将 /buyer/screen 返回的 candidates 划分到四个梯队
+function buildTiersFromCandidates(candidates) {
+  const gradeMap = { 'S': 1, 'A': 2, 'B': 3, 'C': 4, 'D': 4 }
+  const scoreBuckets = { 1: [], 2: [], 3: [], 4: [] }
+
+  candidates.forEach(c => {
+    let tierNum
+    const effectiveScore = c.overallScore ?? c.matchScore ?? 0
+    if (c.grade) {
+      tierNum = gradeMap[c.grade] || 4
+    } else if (effectiveScore >= 85) {
+      tierNum = 1
+    } else if (effectiveScore >= 70) {
+      tierNum = 2
+    } else if (effectiveScore >= 50) {
+      tierNum = 3
+    } else {
+      tierNum = 4
+    }
+    scoreBuckets[tierNum].push({
+      name: c.companyName,
+      stockCode: c.stockCode,
+      desc: c.matchReasons?.length > 0 ? c.matchReasons[0] : c.mainBusiness || '',
+      matchScore: effectiveScore,
+      industry: c.industry,
+      region: c.region,
+    })
+  })
+
+  return TIER_CONFIGS.map(cfg => ({
+    ...cfg,
+    buyers: scoreBuckets[cfg.tier]?.length > 0 ? scoreBuckets[cfg.tier] : [],
+  }))
+}
 
 function Crown({ size = 24, className }) {
   return (
@@ -120,15 +111,17 @@ export default function BuyerMatchInputPage() {
     try {
       const api = getApi()
 
-      // 并行调用买家画像和筛选接口
-      const [profileRes, screenRes] = await Promise.all([
+      // 调用AI智能筛选Agent（LLM分析 + 真实公开数据）
+      const [profileRes, screeningRes] = await Promise.all([
         api.getBuyerProfile(formData.companyName),
-        api.screenBuyers({
-          companyName: formData.companyName,
-          industry: formData.industry,
-          region: formData.location,
-          valuation: formData.equity,
-          mainCerts: formData.hasQualification ? ['CMA', 'CNAS'] : [],
+        api.getScreeningAgent({
+          targetCompany: {
+            name: formData.companyName,
+            industry: formData.industry,
+            mainBusiness: formData.industry,
+            estimatedValue: formData.equity,
+            region: formData.location,
+          },
           limit: 20,
         }),
       ])
@@ -141,27 +134,38 @@ export default function BuyerMatchInputPage() {
       if (formData.hasTechAdvantage) score += 5
       score = Math.min(100, score)
 
+      // 从 screening-agent 响应中提取最终推荐列表
+      const recommendations = screeningRes.success
+        ? screeningRes.data?.screeningReport?.finalRecommendations || []
+        : []
+
+      // 构建梯队
+      const tiers = buildTiersFromCandidates(recommendations)
+
+      // 推荐的梯队 = 有真实买家的最高梯队
+      const recommendedTier = tiers.find(t => t.buyers.length > 0)?.tier || 3
+
       const result = {
         score,
-        tiers: buyerTiers,
+        tiers,
         formData,
-        recommendedTier: score > 80 ? 1 : score > 60 ? 2 : 3,
-        // 来自真实 API 的数据
+        recommendedTier,
         apiData: {
           profile: profileRes.success ? profileRes.data : null,
-          candidates: screenRes.success ? screenRes.data?.candidates || [] : [],
-          totalCount: screenRes.success ? screenRes.data?.totalCount || 0 : 0,
+          candidates: recommendations,
+          totalCount: recommendations.length,
         },
       }
 
       setMatchResult(result)
     } catch (err) {
       console.error('[BuyerMatch] 匹配失败:', err)
-      // API 失败时降级到本地计算
+      // API 失败时降级到本地计算 + 空梯队
       const matchScore = calculateMatch()
+      const emptyTiers = TIER_CONFIGS.map(cfg => ({ ...cfg, buyers: [] }))
       setMatchResult({
         score: matchScore,
-        tiers: buyerTiers,
+        tiers: emptyTiers,
         formData,
         recommendedTier: matchScore > 80 ? 1 : matchScore > 60 ? 2 : 3,
         apiData: null,
@@ -385,9 +389,10 @@ export default function BuyerMatchInputPage() {
 
             {/* 买家梯队匹配结果 */}
             <div className="space-y-6">
-              {buyerTiers.map((tier) => {
-                const isRecommended = tier.tier === matchResult?.recommendedTier
+              {matchResult.tiers.map((tier) => {
+                const isRecommended = tier.tier === matchResult.recommendedTier
                 const Icon = tier.icon
+                const hasBuyers = tier.buyers.length > 0
                 return (
                   <Card
                     key={tier.tier}
@@ -410,6 +415,9 @@ export default function BuyerMatchInputPage() {
                               {isRecommended && (
                                 <Badge variant="success">推荐</Badge>
                               )}
+                              {!hasBuyers && (
+                                <Badge variant="outline">暂无匹配</Badge>
+                              )}
                             </div>
                             <p className="text-sm text-gray-500 mt-1">{tier.coreMotivation}</p>
                           </div>
@@ -426,22 +434,34 @@ export default function BuyerMatchInputPage() {
                         </div>
                       </div>
 
-                      <div className="grid md:grid-cols-3 gap-4">
-                        {tier.buyers.map((buyer, idx) => (
-                          <div
-                            key={idx}
-                            className={`${tier.bgColor} rounded-xl p-4 border ${tier.borderColor}`}
-                          >
-                            <div className="flex items-center gap-2 mb-2">
-                              <CheckCircle size={16} className={
-                                tier.tier === 4 ? 'text-red-400' : 'text-green-500'
-                              } />
-                              <span className="font-medium text-gray-900 text-sm">{buyer.name}</span>
+                      {hasBuyers ? (
+                        <div className="grid md:grid-cols-3 gap-4">
+                          {tier.buyers.map((buyer, idx) => (
+                            <div
+                              key={idx}
+                              className={`${tier.bgColor} rounded-xl p-4 border ${tier.borderColor}`}
+                            >
+                              <div className="flex items-center gap-2 mb-2">
+                                <CheckCircle size={16} className={
+                                  tier.tier === 4 ? 'text-red-400' : 'text-green-500'
+                                } />
+                                <span className="font-medium text-gray-900 text-sm">{buyer.name}</span>
+                                {buyer.stockCode && (
+                                  <Badge variant="outline" className="text-xs ml-auto">{buyer.stockCode}</Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-500 mb-1">{buyer.desc}</p>
+                              {buyer.matchScore > 0 && (
+                                <p className="text-xs font-medium text-primary">匹配度 {buyer.matchScore}分</p>
+                              )}
                             </div>
-                            <p className="text-xs text-gray-500">{buyer.desc}</p>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-6 text-gray-400 text-sm">
+                          暂无该梯队候选买家
+                        </div>
+                      )}
                     </div>
                   </Card>
                 )
