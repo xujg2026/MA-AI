@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import AIDueDiligence from '../components/ai/AIDueDiligence'
 import AIValuation from '../components/ai/AIValuation'
 import AIMatchmaker from '../components/ai/AIMatchmaker'
+import AIProtocolSigning from '../components/ai/AIProtocolSigning'
 import DDReportGenerator from '../components/ai/DDReportGenerator'
 import BuyerMatchInputPage from './BuyerMatchInputPage'
 import { FileCheck, DollarSign, Users, FileText, Sparkles, FileSignature, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react'
@@ -43,26 +44,7 @@ export default function BuyerMatchingPage() {
   const renderContent = () => {
     switch (activeTab) {
       case 'protocol':
-        return (
-          <Card padding="lg" className="text-center">
-            <div className="py-12">
-              <div className="relative inline-block mb-6">
-                <div className="absolute inset-0 bg-primary/10 rounded-full blur-2xl" />
-                <div className="relative w-24 h-24 bg-gradient-to-br from-primary/20 to-secondary/20 rounded-2xl flex items-center justify-center">
-                  <FileSignature size={48} className="text-primary" />
-                </div>
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-3">协议签署</h3>
-              <p className="text-gray-500 mb-6 max-w-md mx-auto">
-                并购协议签署功能开发中，敬请期待...
-              </p>
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-full text-sm text-gray-500">
-                <Sparkles size={14} className="text-primary" />
-                <span>功能即将上线</span>
-              </div>
-            </div>
-          </Card>
-        )
+        return <AIProtocolSigning onComplete={() => markComplete('protocol')} />
       case 'due-diligence':
         return <AIDueDiligence onComplete={() => markComplete('due-diligence')} />
       case 'valuation':

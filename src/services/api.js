@@ -169,6 +169,41 @@ class ApiService {
   getQccCompanyIntelligence(companyName) {
     return this.post('/qcc/company-intelligence', { companyName })
   }
+
+  // ========== 协议管理 ==========
+
+  /**
+   * 获取协议列表
+   * GET /api/protocol/list
+   */
+  getProtocolList(params) {
+    const { transactionId, companyName } = params || {}
+    return this.get('/protocol/list', { transactionId, companyName })
+  }
+
+  /**
+   * 上传协议
+   * POST /api/protocol/upload
+   */
+  uploadProtocol(formData) {
+    return this.post('/protocol/upload', formData)
+  }
+
+  /**
+   * 签署协议
+   * POST /api/protocol/sign
+   */
+  signProtocol(protocolId, signerInfo) {
+    return this.post('/protocol/sign', { protocolId, signerInfo })
+  }
+
+  /**
+   * 删除协议
+   * DELETE /api/protocol/:id
+   */
+  deleteProtocol(protocolId) {
+    return this.request('DELETE', `/protocol/${protocolId}`)
+  }
 }
 
 // 导出单例
