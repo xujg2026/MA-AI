@@ -13,7 +13,7 @@ import {
   Lightbulb,
 } from 'lucide-react'
 
-const integrationFactors = [
+const _integrationFactors = [
   { key: 'cultural', label: '文化整合', icon: Users, weight: 0.2 },
   { key: 'business', label: '业务协同', icon: GitMerge, weight: 0.3 },
   { key: 'personnel', label: '人员稳定', icon: Users, weight: 0.2 },
@@ -21,7 +21,7 @@ const integrationFactors = [
   { key: 'operational', label: '运营协同', icon: TrendingUp, weight: 0.15 },
 ]
 
-const riskItems = [
+const _riskItems = [
   { key: 'key_person_risk', label: '核心人员流失风险', level: 'high', desc: '技术团队稳定性存疑' },
   { key: 'customer_concentration', label: '客户集中度风险', level: 'medium', desc: '前5客户占比超60%' },
   { key: 'technology_integration', label: '技术整合难度', level: 'medium', desc: 'IT系统差异较大' },

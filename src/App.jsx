@@ -11,6 +11,9 @@ import DataManagementPage from './pages/DataManagementPage'
 import NewsPage from './pages/NewsPage'
 import AboutPage from './pages/AboutPage'
 import AIDueDiligencePage from './pages/AIDueDiligencePage'
+import ProjectListPage from './pages/ProjectListPage'
+import ProjectDetailPage from './pages/ProjectDetailPage'
+import ProjectEditPage from './pages/ProjectEditPage'
 
 function App() {
   return (
@@ -28,6 +31,9 @@ function App() {
           <Route path="/news" element={<NewsPage />} />
           <Route path="/ai-due-diligence" element={<AIDueDiligencePage />} />
           <Route path="/about" element={<AboutPage />} />
+          <Route path="/projects" element={<ProjectListPage />} />
+          <Route path="/projects/:id" element={<ProjectDetailPage />} />
+          <Route path="/projects/:id/edit" element={<ProjectEditPage />} />
         </Routes>
       </main>
       <Footer />

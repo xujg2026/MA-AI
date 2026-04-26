@@ -1,4 +1,5 @@
 import { forwardRef } from 'react'
+import { ChevronDown } from 'lucide-react'
 
 const Input = forwardRef(({
   label,
@@ -39,7 +40,11 @@ const Input = forwardRef(({
       return (
         <select
           ref={ref}
-          className={`${baseClasses} cursor-pointer`}
+          className={`
+            ${baseClasses}
+            appearance-none cursor-pointer pr-10
+            ${Icon && iconPosition === 'left' ? 'pl-10' : ''}
+          `}
           {...props}
         >
           {children}
@@ -78,6 +83,12 @@ const Input = forwardRef(({
           <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
             <Icon size={18} />
           </div>
+        )}
+        {Element === 'select' && (
+          <ChevronDown
+            size={18}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+          />
         )}
       </div>
       {error && (

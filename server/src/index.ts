@@ -15,6 +15,8 @@ import { financialSearchRouter } from './routes/financialSearch.js'
 import { qccRouter } from './routes/qcc.js'
 import { stockDiagnosisRouter } from './routes/stockDiagnosis.js'
 import { protocolRouter } from './routes/protocol.js'
+import { projectsRouter } from './routes/projects.js'
+import { importsRouter } from './routes/imports.js'
 import { runMXSkillSimple } from './utils/mxSkillRunner.js'
 
 const app = express()
@@ -33,6 +35,8 @@ app.use('/api/qcc', qccRouter)
 app.use('/api/search', financialSearchRouter)
 app.use('/api/diagnosis', stockDiagnosisRouter)
 app.use('/api/protocol', protocolRouter)
+app.use('/api/projects', projectsRouter)
+app.use('/api/imports', importsRouter)
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -14,7 +14,7 @@ export default function Navbar() {
     { name: 'AI交易', href: '/buyer-matching' },
     { name: '并购资讯', href: '/news' },
     { name: '案例库', href: '/deals', desc: '既往交易' },
-    { name: '数据管理', href: '/data-management' },
+    { name: '项目管理', href: '/projects' },
     { name: '关于我们', href: '/about' },
   ]
 

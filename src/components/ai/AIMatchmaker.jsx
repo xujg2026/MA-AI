@@ -1,14 +1,8 @@
 import { useState, useEffect } from 'react'
-import { industries, regions, mockDeals, mockBuyers } from '../../data/mockData'
-import useExcelDataStore from '../../data/excelData'
-import { Brain, Target, TrendingUp, CheckCircle, Sparkles, GitMerge, MapPin, Building2, Users, Zap, Target as TargetIcon } from 'lucide-react'
+import { getApi } from '../../services/api'
+import useProjectStore from '../../stores/projectStore'
+import { Brain, Target, TrendingUp, CheckCircle, Sparkles, GitMerge, MapPin, Building2, Users, Zap, Target as TargetIcon, AlertCircle, BarChart3 } from 'lucide-react'
 import { Card, Button, Input, Badge } from '../ui'
-
-// Multi-dimensional matching criteria - 业务关联性 + 企业规模
-const matchDimensions = [
-  { key: 'businessRelevance', label: '业务关联性', weight: 0.60, icon: GitMerge },
-  { key: 'enterpriseScale', label: '企业规模', weight: 0.40, icon: TrendingUp },
-]
 
 // 并购动机选项
 const acquisitionMotivations = [
@@ -45,35 +39,112 @@ const acquisitionMotivations = [
   },
 ]
 
-export default function AIMatchmaker({ onComplete }) {
+// 评级徽章颜色
+const gradeColors = {
+  'S': { bg: 'bg-purple-100', text: 'text-purple-700', border: 'border-purple-300' },
+  'A': { bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-300' },
+  'B': { bg: 'bg-blue-100', text: 'text-blue-700', border: 'border-blue-300' },
+  'C': { bg: 'bg-yellow-100', text: 'text-yellow-700', border: 'border-yellow-300' },
+  'D': { bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-300' },
+}
+
+export default function AIMatchmaker({ projectId, onComplete }) {
   const [formData, setFormData] = useState({
-    industry: '',
-    minAmount: '',
-    maxAmount: '',
-    region: '',
-    // 财务信息
-    revenue1: '',
-    revenue2: '',
-    revenue3: '',
-    grossMargin: '',
-    netProfit: '',
-    netAssets: '',
-    totalAssets: '',
-    // 出售原因
-    sellReason: '',
-    // 并购动机
     acquisitionMotivations: [],
     acquisitionMotivationOther: '',
   })
   const [matches, setMatches] = useState([])
   const [isMatching, setIsMatching] = useState(false)
-  const [isAutoMatch, setIsAutoMatch] = useState(true)
+  const [isCompleted, setIsCompleted] = useState(false)
+  const [error, setError] = useState(null)
+  const [screeningReport, setScreeningReport] = useState(null)
+  const [isCached, setIsCached] = useState(false)
+  const [cacheInfo, setCacheInfo] = useState(null)
 
-  const importedDeals = useExcelDataStore((state) => state.importedDeals)
-  const allDeals = [...mockDeals, ...importedDeals]
+  const { projects = [], fetchProjects } = useProjectStore()
 
-  const handleInputChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
+  // 获取当前项目信息
+  const currentProject = projects.find(p => p.id === projectId)
+
+  // 保存阶段数据到项目
+  const savePhaseData = async (outputData) => {
+    if (!projectId) return
+    try {
+      const api = getApi()
+      await api.saveProjectPhase(projectId, 'match', outputData)
+    } catch (err) {
+      console.error('保存买家匹配阶段数据失败:', err)
+    }
+  }
+
+  // 标记完成 - 供外部调用
+  const _handleComplete = async () => {
+    if (isCompleted || matches.length === 0 || !onComplete) return
+    setIsCompleted(true)
+
+    const outputData = {
+      completedAt: new Date().toISOString(),
+      matchCount: matches.length,
+      topMatches: matches.slice(0, 5).map(m => ({
+        company: m.companyName,
+        industry: m.industry,
+        region: m.region || '-',
+        matchScore: m.overallScore,
+      })),
+    }
+    await savePhaseData(outputData)
+    onComplete()
+  }
+
+  // 调用后端API进行买家筛选
+  const runBuyerScreening = async (forceRefresh = false) => {
+    if (!currentProject) {
+      setError('请先选择项目')
+      return
+    }
+
+    setIsMatching(true)
+    setError(null)
+    setMatches([])
+
+    try {
+      const api = getApi()
+      const response = await api.getScreeningAgent({
+        targetCompany: {
+          name: currentProject.company_name || currentProject.name,
+          industry: currentProject.industry,
+          mainBusiness: currentProject.main_business,
+          estimatedValue: currentProject.estimated_value || currentProject.valuation,
+          region: currentProject.region,
+        },
+        limit: 10,
+        forceRefresh,
+      })
+
+      if (response.success !== false && response.data?.screeningReport) {
+        const report = response.data.screeningReport
+        setScreeningReport(report)
+        setMatches(report.finalRecommendations || [])
+        // 处理缓存状态
+        if (response.data._cached) {
+          setIsCached(true)
+          setCacheInfo({
+            id: response.data._cacheId,
+            createdAt: response.data._cacheCreatedAt,
+          })
+        } else {
+          setIsCached(false)
+          setCacheInfo(null)
+        }
+      } else {
+        setError(response.error || '获取买家匹配结果失败')
+      }
+    } catch (err) {
+      console.error('买家筛选API调用失败:', err)
+      setError('网络请求失败: ' + (err.message || '未知错误'))
+    } finally {
+      setIsMatching(false)
+    }
   }
 
   const handleMotivationToggle = (value) => {
@@ -85,132 +156,47 @@ export default function AIMatchmaker({ onComplete }) {
     }))
   }
 
-  // Automatic matching based on business relevance and enterprise scale
-  const calculateMatchScore = (targetDeal) => {
-    const dimensionScores = {}
-
-    // 业务关联性 (60%) - 基于行业、地区、业务协同
-    let businessScore = 0
-    let businessFactors = []
-
-    // 行业关联
-    if (formData.industry && targetDeal.industry === formData.industry) {
-      businessScore += 40
-      businessFactors.push({ type: 'strong', text: '行业高度相关' })
-    } else if (formData.industry && targetDeal.industry) {
-      businessScore += 20
-      businessFactors.push({ type: 'medium', text: '行业存在关联' })
-    }
-
-    // 地域协同
-    if (formData.region && targetDeal.region === formData.region) {
-      businessScore += 20
-      businessFactors.push({ type: 'strong', text: '地域协同' })
-    } else if (formData.region) {
-      businessScore += 10
-    }
-
-    // 规模匹配 - 偏好规模较大的企业
-    const dealVal = targetDeal.valuation || 0
-    if (dealVal >= 10) {
-      businessScore += 25
-      businessFactors.push({ type: 'strong', text: '大型企业' })
-    } else if (dealVal >= 5) {
-      businessScore += 15
-      businessFactors.push({ type: 'medium', text: '中型企业' })
-    } else if (dealVal >= 1) {
-      businessScore += 10
-      businessFactors.push({ type: 'light', text: '中小型企业' })
-    }
-
-    // 业务协同潜力
-    businessScore += Math.floor(Math.random() * 15) + 15
-    businessFactors.push({ type: 'medium', text: '业务协同潜力大' })
-
-    dimensionScores.businessRelevance = Math.min(100, businessScore)
-
-    // 企业规模 (40%) - 评估企业规模大小
-    let scaleScore = 0
-    let scaleFactors = []
-
-    // 基于估值评估规模
-    if (dealVal >= 20) {
-      scaleScore = 100
-      scaleFactors.push({ type: 'strong', text: '超大规模企业' })
-    } else if (dealVal >= 10) {
-      scaleScore = 85
-      scaleFactors.push({ type: 'strong', text: '大型企业' })
-    } else if (dealVal >= 5) {
-      scaleScore = 70
-      scaleFactors.push({ type: 'medium', text: '中大型企业' })
-    } else if (dealVal >= 1) {
-      scaleScore = 55
-      scaleFactors.push({ type: 'light', text: '中型企业' })
-    } else {
-      scaleScore = 40
-      scaleFactors.push({ type: 'light', text: '中小型企业' })
-    }
-
-    // 规模稳定增长
-    scaleScore += Math.floor(Math.random() * 10)
-    dimensionScores.enterpriseScale = Math.min(100, scaleScore)
-
-    // Calculate weighted score
-    let totalScore = 0
-    Object.entries(dimensionScores).forEach(([key, score]) => {
-      const dim = matchDimensions.find((d) => d.key === key)
-      if (dim) {
-        totalScore += score * dim.weight
-      }
-    })
-
-    // Combine factors
-    const reasons = [...businessFactors, ...scaleFactors]
-
-    // Risk factors
-    const riskFactors = []
-    if (dealVal < 1) {
-      riskFactors.push({ level: 'medium', text: '企业规模较小' })
-    }
-    if (businessScore < 50) {
-      riskFactors.push({ level: 'medium', text: '业务关联性一般' })
-    }
-
-    return {
-      score: Math.round(totalScore),
-      dimensionScores,
-      reasons,
-      riskFactors,
-    }
-  }
-
-  // Automatic matching on mount
+  // 项目变化时自动运行筛选
   useEffect(() => {
-    if (isAutoMatch && allDeals.length > 0) {
-      handleAutoMatch()
+    if (projectId && currentProject) {
+      runBuyerScreening()
     }
-  }, [])
+  }, [projectId, currentProject?.id])
 
-  const handleAutoMatch = () => {
-    setIsMatching(true)
-    setMatches([])
+  // 加载已有的阶段数据
+  useEffect(() => {
+    if (!projectId) return
 
-    setTimeout(() => {
-      const matchedDeals = allDeals.map((deal) => {
-        const { score, dimensionScores, reasons, riskFactors } = calculateMatchScore(deal)
-        return { ...deal, matchScore: score, dimensionScores, matchReasons: reasons, riskFactors }
-      })
+    const loadPhaseData = async () => {
+      try {
+        const api = getApi()
+        const response = await api.getProjectPhases(projectId)
+        if (response.success !== false && response.data) {
+          const matchPhase = response.data.find(p => p.phase === 'match')
+          if (matchPhase && matchPhase.output_data) {
+            const outputData = typeof matchPhase.output_data === 'string'
+              ? JSON.parse(matchPhase.output_data)
+              : matchPhase.output_data
+            if (outputData.topMatches && Array.isArray(outputData.topMatches)) {
+              const loadedMatches = outputData.topMatches.map(m => ({
+                ...m,
+                id: `loaded-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                overallScore: m.matchScore,
+              }))
+              setMatches(loadedMatches)
+            }
+            if (outputData.completedAt) {
+              setIsCompleted(true)
+            }
+          }
+        }
+      } catch (err) {
+        console.error('加载匹配数据失败:', err)
+      }
+    }
 
-      // Sort by score - prioritize business relevance and enterprise scale
-      matchedDeals.sort((a, b) => b.matchScore - a.matchScore)
-
-      // Get Top 6 matches - larger enterprises first
-      const topMatches = matchedDeals.filter((d) => d.matchScore >= 40).slice(0, 6)
-
-      setMatches(topMatches)
-      setIsMatching(false)
-    }, 2000)
-  }
+    loadPhaseData()
+  }, [projectId])
 
   return (
     <div className="space-y-6">
@@ -327,17 +313,57 @@ export default function AIMatchmaker({ onComplete }) {
       </Card>
 
       {/* Results */}
+      {error && (
+        <Card padding="lg" className="border-red-200 bg-red-50">
+          <div className="flex items-center text-red-600">
+            <AlertCircle size={20} className="mr-2" />
+            <span>{error}</span>
+          </div>
+        </Card>
+      )}
+
       {isMatching ? (
         <Card padding="lg" className="text-center">
           <div className="animate-pulse">
             <Sparkles className="mx-auto text-primary mb-4" size={48} />
             <p className="text-gray-600 mb-2">AI正在全市场分析潜在买家...</p>
-            <p className="text-sm text-gray-400">匹配原则：业务关联性 + 企业规模优先</p>
+            <p className="text-sm text-gray-400">基于A股上市公司数据库 + 财务数据 + 并购历史分析</p>
+            {currentProject && (
+              <p className="text-xs text-gray-400 mt-1">目标公司：{currentProject.company_name || currentProject.name}</p>
+            )}
           </div>
         </Card>
       ) : matches.length > 0 ? (
         <>
-          <div className="flex items-center justify-between">
+          {/* Screening Report Summary */}
+          {screeningReport && (
+            <Card padding="md" className="mb-6 bg-gradient-to-r from-primary/5 to-secondary/5 border-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+                    <BarChart3 size={20} className="text-primary" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-900">筛选报告</p>
+                      {isCached && (
+                        <Badge variant="primary" className="text-xs">缓存</Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      候选 {screeningReport.totalCandidates} 家 | 通过初筛 {screeningReport.passedFirstStep} 家
+                      {cacheInfo && (
+                        <span className="ml-2 text-primary">（{new Date(cacheInfo.createdAt).toLocaleString()} 生成）</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">{screeningReport.screeningDate}</p>
+              </div>
+            </Card>
+          )}
+
+          <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2 text-primary">
               <Target size={20} />
               <span className="font-medium">找到 {matches.length} 个高匹配买家</span>
@@ -346,129 +372,121 @@ export default function AIMatchmaker({ onComplete }) {
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {matches.map((deal, index) => (
-              <Card key={deal.id} padding="md" hover className="transition-shadow overflow-hidden">
-                <div className="h-1 bg-gradient-to-r from-primary to-secondary" />
-                <div className="pt-4">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center text-white font-bold shadow-lg">
-                        {index + 1}
+            {matches.map((buyer, index) => {
+              const gradeStyle = gradeColors[buyer.grade] || gradeColors['B']
+              return (
+                <Card key={buyer.stockCode || index} padding="md" hover className="transition-shadow overflow-hidden">
+                  <div className={`h-1 bg-gradient-to-r ${index === 0 ? 'from-purple-500 to-pink-500' : index === 1 ? 'from-blue-500 to-cyan-500' : 'from-primary to-secondary'}`} />
+                  <div className="pt-4">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center space-x-3">
+                        <div className={`w-12 h-12 bg-gradient-to-br ${index === 0 ? 'from-purple-500 to-pink-500' : index === 1 ? 'from-blue-500 to-cyan-500' : 'from-primary to-secondary'} rounded-xl flex items-center justify-center text-white font-bold shadow-lg`}>
+                          {index + 1}
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900">{buyer.companyName}</h3>
+                          <p className="text-xs text-gray-500">{buyer.stockCode} {buyer.exchange === 'SH' ? '上交所' : buyer.exchange === 'SZ' ? '深交所' : buyer.exchange === 'BJ' ? '北交所' : ''}</p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900">{deal.company}</h3>
-                        <p className="text-sm text-gray-500">{deal.title}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="flex items-center space-x-1">
-                        <span className={`text-2xl font-bold ${
-                          deal.matchScore >= 80 ? 'text-green-600' :
-                          deal.matchScore >= 65 ? 'text-primary' : 'text-gray-600'
-                        }`}>
-                          {deal.matchScore}
+                      <div className="text-right">
+                        <div className="flex items-center space-x-1">
+                          <span className={`text-2xl font-bold ${
+                            buyer.overallScore >= 75 ? 'text-green-600' :
+                            buyer.overallScore >= 65 ? 'text-primary' : 'text-gray-600'
+                          }`}>
+                            {buyer.overallScore}
+                          </span>
+                          <span className="text-gray-400">分</span>
+                        </div>
+                        <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium ${gradeStyle.bg} ${gradeStyle.text} border ${gradeStyle.border}`}>
+                          {buyer.grade}级
                         </span>
-                        <span className="text-gray-400">分</span>
                       </div>
-                      <Badge variant={deal.matchScore >= 80 ? 'success' : deal.matchScore >= 65 ? 'primary' : 'warning'}>
-                        {deal.matchScore >= 80 ? '优质' : deal.matchScore >= 65 ? '良好' : '匹配'}
-                      </Badge>
                     </div>
+
+                    {/* Main Business */}
+                    <p className="text-xs text-gray-500 mb-3 line-clamp-2">{buyer.mainBusiness}</p>
+
+                    {/* Score Breakdown */}
+                    <div className="mb-3 p-3 bg-gray-50 rounded-xl">
+                      <p className="text-xs text-gray-500 mb-2">评分明细</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex items-center space-x-2">
+                          <GitMerge size={14} className="text-blue-500" />
+                          <span className="text-xs text-gray-600">战略协同性</span>
+                          <span className="text-xs font-bold text-blue-600 ml-auto">{buyer.strategicAlignmentScore || 0}</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <TrendingUp size={14} className="text-green-500" />
+                          <span className="text-xs text-gray-600">财务健康度</span>
+                          <span className="text-xs font-bold text-green-600 ml-auto">{buyer.financialHealthScore || 0}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Key Strengths */}
+                    {buyer.keyStrengths && buyer.keyStrengths.length > 0 && (
+                      <div className="mb-3">
+                        <p className="text-xs text-gray-500 mb-2">核心优势：</p>
+                        <div className="flex flex-wrap gap-1">
+                          {buyer.keyStrengths.slice(0, 3).map((strength, idx) => (
+                            <Badge key={idx} variant="success" className="text-xs">
+                              {strength}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Main Concerns */}
+                    {buyer.mainConcerns && buyer.mainConcerns.length > 0 && (
+                      <div className="mb-3">
+                        <p className="text-xs text-gray-500 mb-2">需关注：</p>
+                        <div className="flex flex-wrap gap-1">
+                          {buyer.mainConcerns.slice(0, 2).map((concern, idx) => (
+                            <Badge key={idx} variant="warning" className="text-xs">
+                              {concern}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <Button variant="outline" className="w-full" size="sm">
+                      查看详情
+                    </Button>
                   </div>
-
-                  {/* Score Breakdown */}
-                  <div className="mb-4 p-3 bg-gray-50 rounded-xl">
-                    <p className="text-xs text-gray-500 mb-2">匹配评分</p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="flex items-center space-x-2">
-                        <GitMerge size={14} className="text-blue-500" />
-                        <span className="text-xs text-gray-600">业务关联性</span>
-                        <span className="text-xs font-bold text-blue-600 ml-auto">{deal.dimensionScores?.businessRelevance || 0}</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <TrendingUp size={14} className="text-green-500" />
-                        <span className="text-xs text-gray-600">企业规模</span>
-                        <span className="text-xs font-bold text-green-600 ml-auto">{deal.dimensionScores?.enterpriseScale || 0}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Match Reasons */}
-                  {deal.matchReasons && deal.matchReasons.length > 0 && (
-                    <div className="mb-4">
-                      <p className="text-xs text-gray-500 mb-2">匹配亮点：</p>
-                      <div className="flex flex-wrap gap-1">
-                        {deal.matchReasons.slice(0, 3).map((reason, idx) => (
-                          <Badge
-                            key={idx}
-                            variant={reason.type === 'strong' ? 'success' : reason.type === 'medium' ? 'primary' : 'warning'}
-                            className="text-xs"
-                          >
-                            {reason.text}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Risk Factors */}
-                  {deal.riskFactors && deal.riskFactors.length > 0 && (
-                    <div className="mb-4">
-                      <p className="text-xs text-gray-500 mb-2">提示：</p>
-                      <div className="flex flex-wrap gap-1">
-                        {deal.riskFactors.map((risk, idx) => (
-                          <Badge
-                            key={idx}
-                            variant="warning"
-                            className="text-xs"
-                          >
-                            {risk.text}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-3 gap-3 mb-4">
-                    <div className="text-center p-2 bg-gray-50 rounded-lg">
-                      <p className="text-xs text-gray-500">估值</p>
-                      <p className="font-semibold text-primary text-sm">{deal.amount}</p>
-                    </div>
-                    <div className="text-center p-2 bg-gray-50 rounded-lg">
-                      <p className="text-xs text-gray-500">行业</p>
-                      <p className="font-semibold text-gray-700 text-sm">{deal.industry}</p>
-                    </div>
-                    <div className="text-center p-2 bg-gray-50 rounded-lg">
-                      <p className="text-xs text-gray-500">地域</p>
-                      <p className="font-semibold text-gray-700 text-sm">{deal.region}</p>
-                    </div>
-                  </div>
-
-                  <Button variant="outline" className="w-full" size="sm">
-                    查看详情
-                  </Button>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              )
+            })}
           </div>
 
           {/* Re-match Button */}
-          <div className="text-center mt-6">
-            <Button variant="ghost" onClick={handleAutoMatch} className="px-6">
+          <div className="text-center mt-6 flex justify-center gap-3">
+            <Button variant="ghost" onClick={() => runBuyerScreening(true)} className="px-6">
               <Sparkles size={16} className="mr-2" />
-              重新匹配
+              {isCached ? '强制刷新缓存' : '重新筛选'}
             </Button>
+            {isCached && (
+              <Button variant="outline" onClick={() => runBuyerScreening(false)} className="px-6">
+                使用缓存结果
+              </Button>
+            )}
           </div>
         </>
-      ) : (
+      ) : !error && !isMatching ? (
         <Card padding="lg" className="text-center">
           <Brain className="mx-auto text-gray-300 mb-4" size={48} />
-          <p className="text-gray-500">正在分析市场数据，寻找优质买家...</p>
+          <p className="text-gray-500">暂无匹配结果</p>
           <p className="text-sm text-gray-400 mt-2">
-            AI将自动匹配业务关联性强、规模较大的企业
+            请确保项目信息完整后重新筛选
           </p>
+          <Button variant="outline" onClick={runBuyerScreening} className="mt-4">
+            <Sparkles size={16} className="mr-2" />
+            重新筛选
+          </Button>
         </Card>
-      )}
+      ) : null}
     </div>
   )
 }

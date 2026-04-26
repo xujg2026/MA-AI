@@ -8,6 +8,9 @@ import {
   Download,
   Trash2,
   RefreshCw,
+  Building2,
+  List,
+  Loader2,
 } from 'lucide-react'
 import {
   columnMappings,
@@ -15,8 +18,9 @@ import {
 } from '../../data/excelData'
 import useExcelDataStore from '../../data/excelData'
 import { Card, Button, Badge, Select } from '../ui'
+import { getApi } from '../../services/api'
 
-export default function ExcelImporter({ onImportComplete }) {
+export default function ExcelImporter({ onImportComplete, onProjectsCreated }) {
   const [file, setFile] = useState(null)
   const [rawData, setRawData] = useState([])
   const [headers, setHeaders] = useState([])
@@ -24,6 +28,12 @@ export default function ExcelImporter({ onImportComplete }) {
   const [step, setStep] = useState('upload')
   const [errors, setErrors] = useState([])
   const [importing, setImporting] = useState(false)
+
+  // 新增：创建项目相关状态
+  const [importedRecords, setImportedRecords] = useState([])
+  const [selectedRecords, setSelectedRecords] = useState({})
+  const [creatingProjects, setCreatingProjects] = useState(false)
+  const [createResult, setCreateResult] = useState(null)
 
   const { addImportedDeals, importHistory, clearImportedDeals } = useExcelDataStore()
 
@@ -140,6 +150,14 @@ export default function ExcelImporter({ onImportComplete }) {
         return
       }
 
+      // 保存导入的记录，初始化选中状态（全选）
+      const initialSelected = {}
+      allRecords.forEach((record) => {
+        initialSelected[record.id] = true
+      })
+      setImportedRecords(allRecords)
+      setSelectedRecords(initialSelected)
+
       addImportedDeals(allRecords)
       setStep('complete')
 
@@ -160,6 +178,83 @@ export default function ExcelImporter({ onImportComplete }) {
     setColumnMap({})
     setStep('upload')
     setErrors([])
+    setImportedRecords([])
+    setSelectedRecords({})
+    setCreateResult(null)
+  }
+
+  // 切换记录选中状态
+  const toggleRecordSelection = (recordId) => {
+    setSelectedRecords((prev) => ({
+      ...prev,
+      [recordId]: !prev[recordId],
+    }))
+  }
+
+  // 全选/取消全选
+  const toggleSelectAll = () => {
+    if (Object.values(selectedRecords).every((v) => v)) {
+      // 全部取消选中
+      const noneSelected = {}
+      importedRecords.forEach((r) => {
+        noneSelected[r.id] = false
+      })
+      setSelectedRecords(noneSelected)
+    } else {
+      // 全部选中
+      const allSelected = {}
+      importedRecords.forEach((r) => {
+        allSelected[r.id] = true
+      })
+      setSelectedRecords(allSelected)
+    }
+  }
+
+  // 创建选中的项目
+  const handleCreateProjects = async () => {
+    const selectedRecordsList = importedRecords.filter((r) => selectedRecords[r.id])
+
+    if (selectedRecordsList.length === 0) {
+      setErrors(['请至少选择一条记录创建项目'])
+      return
+    }
+
+    setCreatingProjects(true)
+    setErrors([])
+
+    try {
+      const api = getApi()
+      const result = await api.post('/imports/sync', { records: selectedRecordsList })
+
+      if (result.success) {
+        setCreateResult({
+          success: true,
+          importedCount: result.data.importedCount,
+          failedCount: result.data.failedCount,
+          projects: result.data.projects,
+        })
+        setStep('projects-created')
+        if (onProjectsCreated) {
+          onProjectsCreated(result.data)
+        }
+      } else {
+        setErrors([result.error || '创建项目失败'])
+      }
+    } catch (err) {
+      setErrors(['创建项目失败: ' + err.message])
+    }
+
+    setCreatingProjects(false)
+  }
+
+  // 跳转到项目列表
+  const goToProjectList = () => {
+    window.location.href = '/projects'
+  }
+
+  // 跳转到项目详情
+  const goToProjectDetail = (projectId) => {
+    window.location.href = `/projects/${projectId}`
   }
 
   const downloadTemplate = () => {
@@ -402,26 +497,155 @@ export default function ExcelImporter({ onImportComplete }) {
 
       {/* Step 4: Complete */}
       {step === 'complete' && (
-        <div className="text-center py-8">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Check className="text-green-600" size={32} />
+        <div className="space-y-6">
+          <div className="text-center py-4">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Check className="text-green-600" size={32} />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">导入成功！</h3>
+            <p className="text-gray-600">
+              成功导入 <strong>{rawData.length}</strong> 条项目数据
+            </p>
           </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">导入成功！</h3>
-          <p className="text-gray-600 mb-6">
-            成功导入 <strong>{rawData.length}</strong> 条项目数据
-          </p>
+
+          {/* 选择创建项目 */}
+          <div className="border border-gray-200 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-2">
+                <Building2 size={20} className="text-primary" />
+                <h4 className="font-medium text-gray-900">创建项目</h4>
+              </div>
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={Object.values(selectedRecords).every((v) => v)}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
+                />
+                <span className="text-sm text-gray-600">全选</span>
+              </label>
+            </div>
+
+            <div className="max-h-60 overflow-y-auto space-y-2 mb-4">
+              {importedRecords.map((record) => (
+                <div
+                  key={record.id}
+                  className={`flex items-center space-x-3 p-2 rounded-lg cursor-pointer transition-colors ${
+                    selectedRecords[record.id]
+                      ? 'bg-primary/5 border border-primary/20'
+                      : 'bg-gray-50 hover:bg-gray-100'
+                  }`}
+                  onClick={() => toggleRecordSelection(record.id)}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedRecords[record.id] || false}
+                    onChange={() => toggleRecordSelection(record.id)}
+                    className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {record.company}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {record.industry} | {record.region} | 估值{record.valuation}亿
+                    </p>
+                  </div>
+                  <Badge variant={record.type === 'sell' ? 'info' : 'success'}>
+                    {record.type === 'sell' ? '卖方' : '买方'}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+              <span className="text-sm text-gray-500">
+                已选择 <strong>{Object.values(selectedRecords).filter((v) => v).length}</strong> 条
+              </span>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleCreateProjects}
+                disabled={creatingProjects || Object.values(selectedRecords).every((v) => !v)}
+              >
+                {creatingProjects ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin mr-2" />
+                    创建中...
+                  </>
+                ) : (
+                  <>
+                    <Building2 size={16} className="mr-2" />
+                    创建项目
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {/* 操作按钮 */}
           <div className="flex justify-center space-x-4">
             <Button variant="outline" onClick={handleReset}>
               继续导入
             </Button>
-            <Button
-              variant="primary"
-              onClick={() => {
-                handleReset()
-                if (onImportComplete) onImportComplete()
-              }}
-            >
-              查看项目
+            <Button variant="ghost" onClick={goToProjectList}>
+              <List size={16} className="mr-2" />
+              查看项目列表
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 5: Projects Created */}
+      {step === 'projects-created' && createResult && (
+        <div className="space-y-6">
+          <div className="text-center py-4">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Check className="text-green-600" size={32} />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">项目创建成功！</h3>
+            <p className="text-gray-600">
+              成功创建 <strong>{createResult.importedCount}</strong> 个项目
+              {createResult.failedCount > 0 && (
+                <span className="text-red-500 ml-2">失败 {createResult.failedCount} 个</span>
+              )}
+            </p>
+          </div>
+
+          {/* 创建的项目列表 */}
+          <div className="border border-gray-200 rounded-xl divide-y divide-gray-100">
+            {createResult.projects.slice(0, 5).map((project) => (
+              <div
+                key={project.id}
+                className="flex items-center justify-between p-3 hover:bg-gray-50 cursor-pointer"
+                onClick={() => goToProjectDetail(project.id)}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {project.company_name || project.name}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {project.industry} | {project.region}
+                  </p>
+                </div>
+                <Badge variant="success">已创建</Badge>
+              </div>
+            ))}
+            {createResult.projects.length > 5 && (
+              <div className="p-2 text-center text-sm text-gray-500">
+                还有 {createResult.projects.length - 5} 个项目...
+              </div>
+            )}
+          </div>
+
+          {/* 操作按钮 */}
+          <div className="flex justify-center space-x-4">
+            <Button variant="outline" onClick={handleReset}>
+              继续导入
+            </Button>
+            <Button variant="primary" onClick={goToProjectList}>
+              <List size={16} className="mr-2" />
+              查看项目列表
             </Button>
           </div>
         </div>

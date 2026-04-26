@@ -1,6 +1,6 @@
 # 开发总结
 
-**最后更新:** 2026-04-21
+**最后更新:** 2026-04-26
 
 ---
 
@@ -135,3 +135,115 @@ QCC_API_BASE_URL=https://agent.qcc.com/mcp
 |--------|------|------|
 | 低 | cninfo备选 | 如需更多公告来源可扩展 |
 | 低 | Python环境优化 | 确保Anaconda在PATH首位 |
+
+---
+
+## 八、项目管理模块 (2026-04-25)
+
+### 问题描述
+项目管理界面和项目详情页中，公司名没有和项目中的企业名称进行挂钩。前端调用的后端字段可能不准确。
+
+### 根本原因
+1. **字段名不一致**: 后端数据库和 API 使用 `company_name` 字段，但前端显示层使用 `company`（不存在）
+2. **更新方法错误**: `projectStore.js` 中更新项目使用 `POST` 而非 `PUT`
+3. **字段映射错误**: 详情页使用 `valuation`、`createdAt`、`updatedAt`、`motivation` 等错误字段名
+4. **时间显示问题**: 时间戳未转换为东八区 (Asia/Shanghai) 时区
+
+### 修复内容
+
+| 文件 | 修改内容 |
+|------|---------|
+| `src/pages/ProjectListPage.jsx` | `project.company` → `company_name` |
+| `src/pages/ProjectDetailPage.jsx` | `currentProject.company` → `company_name` |
+| `src/pages/ProjectDetailPage.jsx` | `currentProject.valuation` → `estimated_value` |
+| `src/pages/ProjectDetailPage.jsx` | `currentProject.createdAt` → `created_at` |
+| `src/pages/ProjectDetailPage.jsx` | `currentProject.updatedAt` → `updated_at` |
+| `src/pages/ProjectDetailPage.jsx` | `currentProject.motivation` → `sell_motivation` (数组格式) |
+| `src/pages/BuyerMatchingPage.jsx` | `project.company` → `company_name` |
+| `src/components/projects/ProjectSelector.jsx` | `deal?.company` → `deal?.company_name` |
+| `src/stores/projectStore.js` | `api.post()` → `api.updateProject()` (PUT) |
+| `src/pages/ProjectDetailPage.jsx` | 新增字段: `company_type`, `establishment_date`, `registration_capital`, `employee_count` |
+| `src/pages/ProjectDetailPage.jsx` | 新增财务信息 Card (收入、净利润、资产) |
+| `src/pages/ProjectDetailPage.jsx` | 时间显示转换为东八区 `Asia/Shanghai` 时区 |
+
+---
+
+## 九、项目管理模块修复 (2026-04-26)
+
+### 新增文件
+
+| 文件 | 说明 |
+|------|------|
+| `server/src/routes/projects.ts` | 项目管理 REST API (CRUD + 阶段管理) |
+| `server/src/routes/imports.ts` | Excel 导入 API |
+| `server/src/utils/projectDb.ts` | SQLite 项目数据库工具 |
+| `server/data/projects.db` | 项目 SQLite 数据库 |
+| `src/pages/ProjectListPage.jsx` | 项目列表页 |
+| `src/pages/ProjectDetailPage.jsx` | 项目详情页 |
+| `src/components/projects/ProjectForm.jsx` | 项目创建/编辑表单 |
+| `src/components/projects/ProjectSelector.jsx` | 项目选择/创建弹窗 |
+| `src/stores/projectStore.js` | Zustand 项目状态管理 |
+
+### 修改文件
+
+| 文件 | 改动 |
+|------|------|
+| `server/src/index.ts` | 挂载 `/api/projects` 和 `/api/imports` 路由 |
+| `src/App.jsx` | 添加 `/projects` 和 `/projects/:id` 路由 |
+| `src/components/layout/Navbar.jsx` | 添加"项目管理"导航入口 |
+| `src/services/api.js` | 添加 projects API 方法 |
+| `src/data/excelData.js` | 对接后端 API |
+| `src/pages/AIFinderPage.jsx` | 觅售结果添加"归集到项目"功能 |
+| `src/pages/BuyerMatchingPage.jsx` | 支持项目上下文和项目选择 |
+
+### 核心功能
+
+1. **项目管理 CRUD** - 创建、读取、更新、删除项目
+2. **项目列表** - 状态筛选、关键词搜索、分页
+3. **项目详情** - 基本信息、财务数据、觅售报告、交易流程
+4. **觅售归集** - 将 AI 觅售结果归集到项目
+5. **交易流程** - 协议签署、尽职调查、估值、匹配、推荐书各阶段归集
+6. **Excel 导入** - 批量导入项目数据
+
+### 数据库表结构
+
+**projects 表:**
+- id, name, status, industry, region, estimated_value, source
+- company_name, company_type, registration_capital, establishment_date, employee_count
+- sell_motivation, risk_level, change_records
+- created_at, updated_at, created_by, is_deleted
+
+**project_phases 表:**
+- id, project_id, phase, status, started_at, completed_at, output_data
+
+### 详情页新增展示字段
+
+**项目信息 Card:**
+- 公司类型 (company_type)
+- 成立日期 (establishment_date)
+- 注册资本 (registration_capital)
+- 人员规模 (employee_count)
+
+**详细信息 Card:**
+- 出售动机 (sell_motivation) - 数组格式，映射为中文标签
+
+**财务信息 Card (新增):**
+- 营业收入（近三年）
+- 净利润（近三年）
+- 净资产及截止日期
+- 总资产及截止日期
+
+### 数据库字段对应关系
+
+| 后端/DB 字段 | 前端使用 | 说明 |
+|-------------|---------|------|
+| `company_name` | `company_name` | 企业名称 |
+| `company_type` | `company_type` | 公司类型 |
+| `establishment_date` | `establishment_date` | 成立日期 |
+| `registration_capital` | `registration_capital` | 注册资本 |
+| `employee_count` | `employee_count` | 人员规模 |
+| `estimated_value` | `estimated_value` | 预估估值 |
+| `created_at` | `created_at` | 创建时间 |
+| `updated_at` | `updated_at` | 更新时间 |
+| `change_records` | `change_records` | JSON 包含财务数据、动机等 |
+| `sell_motivation` | `sell_motivation` | 出售动机 (JSON数组) |

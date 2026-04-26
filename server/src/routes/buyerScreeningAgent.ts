@@ -12,6 +12,7 @@ import { analyzeCompanyProfile } from '../utils/companyProfile.js'
 import { getFinancialData, getNewsData, getAnnouncements, fetchAnnouncementContent, analyzeMAExperienceWithLLM, MA_KEYWORDS, FinancialData, NewsData, Announcement } from '../utils/akshareData.js'
 import { calculateFinancialHealthScore, formatFinancialScoreResult } from '../utils/financialScore.js'
 import { calculateStrategicAlignmentScore, formatStrategicScoreResult, MAAnalysisResult } from '../utils/strategicScore.js'
+import { getBuyerScreeningCache, saveBuyerScreeningCache } from '../utils/projectDb.js'
 
 export const buyerScreeningAgentRouter = Router()
 
@@ -28,6 +29,7 @@ interface TargetCompany {
 interface ScreeningRequest {
   targetCompany: TargetCompany
   limit?: number
+  forceRefresh?: boolean  // 是否强制刷新缓存
 }
 
 // 筛选结果接口
@@ -80,7 +82,7 @@ buyerScreeningAgentRouter.post('/screening-agent', async (req, res) => {
   const startTime = Date.now()
 
   try {
-    const { targetCompany, limit = 10 }: ScreeningRequest = req.body
+    const { targetCompany, limit = 10, forceRefresh = false }: ScreeningRequest = req.body
 
     if (!targetCompany?.name) {
       res.status(400).json({
@@ -90,7 +92,30 @@ buyerScreeningAgentRouter.post('/screening-agent', async (req, res) => {
       return
     }
 
-    console.log(`[ScreeningAgent] 开始筛选: ${targetCompany.name}`)
+    console.log(`[ScreeningAgent] 开始筛选: ${targetCompany.name}, forceRefresh=${forceRefresh}`)
+
+    // ========== 步骤0: 检查缓存 ==========
+    if (!forceRefresh) {
+      const cached = getBuyerScreeningCache(targetCompany.name, targetCompany.industry || null)
+      if (cached) {
+        const duration = Date.now() - startTime
+        console.log(`[ScreeningAgent] 缓存命中，直接返回: ${targetCompany.name}, 耗时: ${duration}ms`)
+        logScreeningProcess(targetCompany.name, 'cache_hit', 'success', duration)
+
+        res.json({
+          success: true,
+          data: {
+            screeningReport: JSON.parse(cached.results),
+            _cached: true,
+            _cacheId: cached.id,
+            _cacheCreatedAt: cached.created_at,
+          }
+        })
+        return
+      }
+    } else {
+      console.log(`[ScreeningAgent] forceRefresh=true，跳过缓存检查`)
+    }
 
     // ========== 步骤1: 获取目标公司信息（企查查+降级） ==========
     const userInput: UserInputData = {
@@ -300,17 +325,36 @@ buyerScreeningAgentRouter.post('/screening-agent', async (req, res) => {
 
     console.log(`[ScreeningAgent] 筛选完成，耗时: ${duration}ms，返回 ${finalResults.length} 个结果`)
 
+    // 构建筛选报告
+    const screeningReport = {
+      targetCompany: targetCompany.name,
+      targetIndustry: targetCompany.industry || profile.mainBusiness,
+      screeningDate: new Date().toISOString().split('T')[0],
+      totalCandidates: candidates.length,
+      passedFirstStep: scoredCandidates.length,
+      finalRecommendations: finalResults,
+    }
+
+    // ========== 步骤7: 保存到缓存 ==========
+    try {
+      const cacheTtlHours = 24 // 缓存24小时
+      saveBuyerScreeningCache(
+        targetCompany.name,
+        targetCompany.industry || null,
+        targetCompany.region || null,
+        targetCompany.estimatedValue ? String(targetCompany.estimatedValue) : null,
+        screeningReport,
+        scoredCandidates.length,
+        cacheTtlHours
+      )
+    } catch (cacheError) {
+      console.warn('[ScreeningAgent] 保存缓存失败（非致命）:', cacheError)
+    }
+
     res.json({
       success: true,
       data: {
-        screeningReport: {
-          targetCompany: targetCompany.name,
-          targetIndustry: targetCompany.industry || profile.mainBusiness,
-          screeningDate: new Date().toISOString().split('T')[0],
-          totalCandidates: candidates.length,
-          passedFirstStep: scoredCandidates.length,
-          finalRecommendations: finalResults,
-        }
+        screeningReport,
       }
     })
 

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { generateSampleReportData, ddReportStructure } from '../../data/ddReportTemplate'
 import { getApi } from '../../services/api'
 import {
@@ -20,16 +20,77 @@ import {
   Shield,
 } from 'lucide-react'
 
-export default function DDReportGenerator({ onComplete }) {
+export default function DDReportGenerator({ projectId, onComplete }) {
   const [companyName, setCompanyName] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [reportData, setReportData] = useState(null)
   const [activeTab, setActiveTab] = useState('input') // input, preview
   const [expandedSections, setExpandedSections] = useState({})
-  const [qccData, setQccData] = useState(null)
+  const [_qccData, setQccData] = useState(null)
   const [qccError, setQccError] = useState(null)
   const [generatingStep, setGeneratingStep] = useState('')
+  const [isCompleted, setIsCompleted] = useState(false)
   const reportRef = useRef(null)
+
+  // 加载已有的阶段数据
+  useEffect(() => {
+    if (!projectId) return
+
+    const loadPhaseData = async () => {
+      try {
+        const api = getApi()
+        const response = await api.getProjectPhases(projectId)
+        if (response.success !== false && response.data) {
+          const reportPhase = response.data.find(p => p.phase === 'report')
+          if (reportPhase && reportPhase.output_data) {
+            const outputData = typeof reportPhase.output_data === 'string'
+              ? JSON.parse(reportPhase.output_data)
+              : reportPhase.output_data
+            if (outputData.reportData) {
+              setReportData(outputData.reportData)
+              setActiveTab('preview')
+            }
+            if (outputData.companyName) {
+              setCompanyName(outputData.companyName)
+            }
+            if (outputData.completedAt) {
+              setIsCompleted(true)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('加载推荐书数据失败:', error)
+      }
+    }
+
+    loadPhaseData()
+  }, [projectId])
+
+  // 保存阶段数据到项目
+  const savePhaseData = async (outputData) => {
+    if (!projectId) return
+    try {
+      const api = getApi()
+      await api.saveProjectPhase(projectId, 'report', outputData)
+    } catch (error) {
+      console.error('保存推荐书阶段数据失败:', error)
+    }
+  }
+
+  // 标记完成
+  const handleComplete = async () => {
+    if (isCompleted || !reportData || !onComplete) return
+    setIsCompleted(true)
+
+    const outputData = {
+      completedAt: new Date().toISOString(),
+      companyName: reportData.companyInfo?.name || companyName,
+      reportDate: reportData.reportDate,
+      qccSummary: reportData.qccSummary,
+    }
+    await savePhaseData(outputData)
+    onComplete()
+  }
 
   const handleGenerate = async () => {
     if (!companyName.trim()) return
@@ -428,6 +489,18 @@ export default function DDReportGenerator({ onComplete }) {
                 >
                   <Download size={18} />
                   <span>下载PDF</span>
+                </button>
+                <button
+                  onClick={handleComplete}
+                  disabled={isCompleted}
+                  className={`flex items-center space-x-2 px-6 py-3 rounded-xl font-medium transition-all ${
+                    isCompleted
+                      ? 'bg-green-100 text-green-600 cursor-not-allowed'
+                      : 'bg-green-500 text-white hover:bg-green-600 shadow-soft hover:shadow-soft-lg'
+                  }`}
+                >
+                  <CheckCircle size={18} />
+                  <span>{isCompleted ? '已完成' : '完成推荐书'}</span>
                 </button>
               </div>
             </div>
