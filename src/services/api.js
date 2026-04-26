@@ -99,10 +99,12 @@ class ApiService {
     const {
       targetCompany,
       limit,
+      forceRefresh,
     } = params
     return this.post('/buyer/screening-agent', {
       targetCompany,
       limit: limit || 10,
+      forceRefresh: forceRefresh || false,
     })
   }
 

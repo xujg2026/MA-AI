@@ -61,6 +61,19 @@ export interface ProjectFilters {
   keyword?: string
 }
 
+// 买家筛选缓存接口
+export interface BuyerScreeningCache {
+  id: string
+  target_name: string
+  target_industry: string | null
+  target_region: string | null
+  estimated_value: string | null
+  results: string  // JSON stringified results
+  candidate_count: number
+  created_at: string
+  expires_at: string | null  // 过期时间，null表示永不过期
+}
+
 // 创建项目参数
 export interface CreateProjectParams {
   id: string
@@ -205,6 +218,26 @@ export function initProjectDb(): void {
   `)
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_project_phases_project_id ON project_phases(project_id)
+  `)
+
+  // 创建买家筛选缓存表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS buyer_screening_cache (
+      id TEXT PRIMARY KEY,
+      target_name TEXT NOT NULL,
+      target_industry TEXT,
+      target_region TEXT,
+      estimated_value TEXT,
+      results TEXT NOT NULL,
+      candidate_count INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      expires_at TEXT
+    )
+  `)
+
+  // 创建缓存查询索引（按目标公司名+行业）
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_buyer_cache_target ON buyer_screening_cache(target_name, target_industry)
   `)
 
   console.log('[ProjectDb] Database initialized successfully')
@@ -613,6 +646,201 @@ export function testConnection(): boolean {
   } catch (error) {
     console.error('[ProjectDb] Database connection failed:', error)
     return false
+  }
+}
+
+// ========== 买家筛选缓存 ==========
+
+/**
+ * 生成缓存唯一ID
+ */
+function generateCacheId(targetName: string, industry: string | null): string {
+  const key = `${targetName}|${industry || ''}`
+  // 简单的hash
+  let hash = 0
+  for (let i = 0; i < key.length; i++) {
+    const char = key.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash
+  }
+  return `bsc_${Math.abs(hash).toString(16)}_${Date.now()}`
+}
+
+/**
+ * 保存买家筛选缓存
+ * @param targetName 目标公司名称
+ * @param industry 目标行业
+ * @param region 目标地区
+ * @param estimatedValue 预估价值
+ * @param results 筛选结果
+ * @param candidateCount 候选数量
+ * @param ttlHours 缓存有效期（小时），默认24小时，null表示永不过期
+ * @returns 缓存记录
+ */
+export function saveBuyerScreeningCache(
+  targetName: string,
+  industry: string | null,
+  region: string | null,
+  estimatedValue: string | null,
+  results: any,
+  candidateCount: number,
+  ttlHours: number | null = 24
+): BuyerScreeningCache | null {
+  const db = getDb()
+
+  try {
+    const id = generateCacheId(targetName, industry)
+    const now = new Date()
+    const expiresAt = ttlHours !== null
+      ? new Date(now.getTime() + ttlHours * 60 * 60 * 1000).toISOString()
+      : null
+
+    const stmt = db.prepare(`
+      INSERT INTO buyer_screening_cache (
+        id, target_name, target_industry, target_region, estimated_value,
+        results, candidate_count, created_at, expires_at
+      ) VALUES (
+        @id, @target_name, @target_industry, @target_region, @estimated_value,
+        @results, @candidate_count, @created_at, @expires_at
+      )
+    `)
+
+    stmt.run({
+      id,
+      target_name: targetName,
+      target_industry: industry || null,
+      target_region: region || null,
+      estimated_value: estimatedValue || null,
+      results: JSON.stringify(results),
+      candidate_count: candidateCount,
+      created_at: now.toISOString(),
+      expires_at: expiresAt,
+    })
+
+    console.log(`[ProjectDb] Buyer screening cache saved: ${id}, target=${targetName}, candidates=${candidateCount}`)
+    return getBuyerScreeningCacheById(id)
+  } catch (error) {
+    console.error('[ProjectDb] saveBuyerScreeningCache error:', error)
+    return null
+  }
+}
+
+/**
+ * 获取买家筛选缓存（按目标公司名和行业）
+ * @param targetName 目标公司名称
+ * @param industry 目标行业
+ * @param forceRefresh 是否强制刷新（忽略缓存）
+ * @returns 缓存结果或null
+ */
+export function getBuyerScreeningCache(
+  targetName: string,
+  industry: string | null,
+  forceRefresh: boolean = false
+): BuyerScreeningCache | null {
+  if (forceRefresh) {
+    return null
+  }
+
+  const db = getDb()
+
+  try {
+    const now = new Date().toISOString()
+
+    // 查询缓存，忽略过期的
+    const row = db.prepare(`
+      SELECT * FROM buyer_screening_cache
+      WHERE target_name = ? AND target_industry IS ? AND (expires_at IS NULL OR expires_at > ?)
+      ORDER BY created_at DESC
+      LIMIT 1
+    `).get(targetName, industry || null, now) as BuyerScreeningCache | undefined
+
+    if (row) {
+      console.log(`[ProjectDb] Buyer screening cache hit: ${row.id}, target=${targetName}, candidates=${row.candidate_count}`)
+      return row
+    }
+
+    console.log(`[ProjectDb] Buyer screening cache miss: target=${targetName}, industry=${industry}`)
+    return null
+  } catch (error) {
+    console.error('[ProjectDb] getBuyerScreeningCache error:', error)
+    return null
+  }
+}
+
+/**
+ * 根据ID获取缓存
+ */
+export function getBuyerScreeningCacheById(id: string): BuyerScreeningCache | null {
+  const db = getDb()
+
+  try {
+    const row = db.prepare('SELECT * FROM buyer_screening_cache WHERE id = ?').get(id) as BuyerScreeningCache | undefined
+    return row || null
+  } catch (error) {
+    console.error('[ProjectDb] getBuyerScreeningCacheById error:', error)
+    return null
+  }
+}
+
+/**
+ * 清除买家筛选缓存
+ * @param targetName 目标公司名称
+ * @param industry 目标行业
+ */
+export function invalidateBuyerScreeningCache(
+  targetName: string,
+  industry: string | null
+): boolean {
+  const db = getDb()
+
+  try {
+    const result = db.prepare(`
+      DELETE FROM buyer_screening_cache
+      WHERE target_name = ? AND target_industry IS ?
+    `).run(targetName, industry || null)
+
+    console.log(`[ProjectDb] Buyer screening cache invalidated: target=${targetName}, industry=${industry}, deleted=${result.changes}`)
+    return result.changes > 0
+  } catch (error) {
+    console.error('[ProjectDb] invalidateBuyerScreeningCache error:', error)
+    return false
+  }
+}
+
+/**
+ * 清除所有买家筛选缓存
+ */
+export function clearAllBuyerScreeningCache(): number {
+  const db = getDb()
+
+  try {
+    const result = db.prepare('DELETE FROM buyer_screening_cache').run()
+    console.log(`[ProjectDb] All buyer screening cache cleared: deleted=${result.changes}`)
+    return result.changes
+  } catch (error) {
+    console.error('[ProjectDb] clearAllBuyerScreeningCache error:', error)
+    return 0
+  }
+}
+
+/**
+ * 获取缓存统计
+ */
+export function getBuyerScreeningCacheStats(): { total: number; expired: number } {
+  const db = getDb()
+
+  try {
+    const now = new Date().toISOString()
+    const total = db.prepare('SELECT COUNT(*) as count FROM buyer_screening_cache').get() as { count: number }
+    const expired = db.prepare('SELECT COUNT(*) as count FROM buyer_screening_cache WHERE expires_at IS NOT NULL AND expires_at <= ?').get(now) as { count: number }
+
+    return {
+      total: total.count,
+      expired: expired.count,
+    }
+  } catch (error) {
+    console.error('[ProjectDb] getBuyerScreeningCacheStats error:', error)
+    return { total: 0, expired: 0 }
   }
 }
 
