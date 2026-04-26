@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ddChecklist } from '../../data/mockData'
 import { getApi } from '../../services/api'
 import {
@@ -23,7 +23,7 @@ import {
 } from 'lucide-react'
 import { Card, Button, Badge } from '../ui'
 
-export default function AIDueDiligence() {
+export default function AIDueDiligence({ projectId, onComplete }) {
   const [expandedSections, setExpandedSections] = useState(['法务', '技术'])
   const [checkedItems, setCheckedItems] = useState({})
   const [customItem, setCustomItem] = useState('')
@@ -33,8 +33,75 @@ export default function AIDueDiligence() {
   const [analysisResult, setAnalysisResult] = useState(null)
   const [companyInfo, setCompanyInfo] = useState(null)
   const [qccError, setQccError] = useState(null)
-  const [ddApiData, setDdApiData] = useState(null) // 存储从API获取的DD清单数据
-  const [expandedItems, setExpandedItems] = useState({}) // 跟踪哪些项目被展开了
+  const [ddApiData, setDdApiData] = useState(null)
+  const [expandedItems, setExpandedItems] = useState({})
+  const [isCompleted, setIsCompleted] = useState(false)
+
+  // 加载已有的阶段数据
+  useEffect(() => {
+    if (!projectId) return
+
+    const loadPhaseData = async () => {
+      try {
+        const api = getApi()
+        const response = await api.getProjectPhases(projectId)
+        if (response.success !== false && response.data) {
+          const ddPhase = response.data.find(p => p.phase === 'due-diligence')
+          if (ddPhase && ddPhase.output_data) {
+            const outputData = typeof ddPhase.output_data === 'string'
+              ? JSON.parse(ddPhase.output_data)
+              : ddPhase.output_data
+            if (outputData.checkedItems) {
+              const loadedChecked = {}
+              outputData.checkedItems.forEach(key => {
+                loadedChecked[key] = true
+              })
+              setCheckedItems(loadedChecked)
+            }
+            if (outputData.completedAt) {
+              setIsCompleted(true)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('加载尽职调查数据失败:', error)
+      }
+    }
+
+    loadPhaseData()
+  }, [projectId])
+
+  // 保存阶段数据到项目
+  const savePhaseData = async (outputData) => {
+    if (!projectId) return
+    try {
+      const api = getApi()
+      await api.saveProjectPhase(projectId, 'due-diligence', outputData)
+    } catch (error) {
+      console.error('保存尽职调查阶段数据失败:', error)
+    }
+  }
+
+  // 标记完成
+  const handleComplete = async () => {
+    if (isCompleted || !onComplete) return
+    setIsCompleted(true)
+
+    const outputData = {
+      completedAt: new Date().toISOString(),
+      checkedItems: Object.keys(checkedItems).filter(k => checkedItems[k]),
+      totalItems: Object.values(ddChecklist).flat().length,
+      completedItems: Object.values(checkedItems).filter(Boolean).length,
+      analysisResult: analysisResult ? {
+        overall: analysisResult.overall,
+        riskLevel: analysisResult.overall >= 70 ? 'low' : analysisResult.overall >= 50 ? 'medium' : 'high',
+        criticalRisks: analysisResult.qccData?.criticalRisks,
+        highRisks: analysisResult.qccData?.highRisks,
+      } : null,
+    }
+    await savePhaseData(outputData)
+    onComplete()
+  }
 
   const toggleSection = (section) => {
     setExpandedSections((prev) =>
@@ -1313,6 +1380,9 @@ export default function AIDueDiligence() {
         </Button>
         <Button variant="primary" icon={Download} onClick={exportDDChecklistMarkdown}>
           导出Markdown
+        </Button>
+        <Button variant="success" icon={CheckCircle} onClick={handleComplete} disabled={isCompleted}>
+          {isCompleted ? '已完成' : '完成尽职调查'}
         </Button>
       </div>
     </div>

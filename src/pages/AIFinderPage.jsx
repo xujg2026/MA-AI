@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Search, Building2, Key, Users, TrendingUp, FileText, Sparkles, Filter, ArrowRight, Shield, Award, MapPin, CheckCircle } from 'lucide-react'
+import { Search, Building2, Key, Users, TrendingUp, FileText, Sparkles, Filter, ArrowRight, Shield, Award, MapPin, CheckCircle, FolderPlus } from 'lucide-react'
 import { Card, Button, Input, Badge } from '../components/ui'
+import ProjectSelector from '../components/projects/ProjectSelector'
 
 const companyTypes = ['民营企业', '国有企业', '外资企业', '合资企业', '上市公司', '非上市公司']
 
@@ -115,6 +116,8 @@ export default function AIFinderPage() {
   const [hasSearched, setHasSearched] = useState(false)
   const [isLoaded, setIsLoaded] = useState(false)
   const [showTICFields, setShowTICFields] = useState(false)
+  const [selectedDeal, setSelectedDeal] = useState(null)
+  const [showProjectSelector, setShowProjectSelector] = useState(false)
 
   useState(() => {
     setTimeout(() => setIsLoaded(true), 100)
@@ -560,9 +563,23 @@ export default function AIFinderPage() {
                             <MapPin size={12} />
                             {deal.region}
                           </span>
-                          <Button variant="ghost" size="sm" className="group-hover:text-primary">
-                            查看详情 <ArrowRight size={14} className="ml-1 group-hover:translate-x-1 transition-transform" />
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedDeal(deal)
+                                setShowProjectSelector(true)
+                              }}
+                              icon={FolderPlus}
+                            >
+                              加入项目
+                            </Button>
+                            <Button variant="ghost" size="sm" className="group-hover:text-primary">
+                              查看详情 <ArrowRight size={14} className="ml-1 group-hover:translate-x-1 transition-transform" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </Card>
@@ -596,6 +613,19 @@ export default function AIFinderPage() {
           </div>
         </div>
       </div>
+
+      {/* Project Selector Modal */}
+      <ProjectSelector
+        isOpen={showProjectSelector}
+        onClose={() => {
+          setShowProjectSelector(false)
+          setSelectedDeal(null)
+        }}
+        deal={selectedDeal}
+        onSuccess={() => {
+          // Optionally show a success message or refresh data
+        }}
+      />
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { industries, regions, mockDeals, mockBuyers } from '../../data/mockData'
+import { mockDeals } from '../../data/mockData'
 import useExcelDataStore from '../../data/excelData'
+import { getApi } from '../../services/api'
 import { Brain, Target, TrendingUp, CheckCircle, Sparkles, GitMerge, MapPin, Building2, Users, Zap, Target as TargetIcon } from 'lucide-react'
 import { Card, Button, Input, Badge } from '../ui'
 
@@ -45,7 +46,7 @@ const acquisitionMotivations = [
   },
 ]
 
-export default function AIMatchmaker({ onComplete }) {
+export default function AIMatchmaker({ projectId, onComplete }) {
   const [formData, setFormData] = useState({
     industry: '',
     minAmount: '',
@@ -67,22 +68,39 @@ export default function AIMatchmaker({ onComplete }) {
   })
   const [matches, setMatches] = useState([])
   const [isMatching, setIsMatching] = useState(false)
-  const [isAutoMatch, setIsAutoMatch] = useState(true)
+  const [isCompleted, setIsCompleted] = useState(false)
 
   const importedDeals = useExcelDataStore((state) => state.importedDeals)
   const allDeals = [...mockDeals, ...importedDeals]
 
-  const handleInputChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
+  // 保存阶段数据到项目
+  const savePhaseData = async (outputData) => {
+    if (!projectId) return
+    try {
+      const api = getApi()
+      await api.saveProjectPhase(projectId, 'match', outputData)
+    } catch (error) {
+      console.error('保存买家匹配阶段数据失败:', error)
+    }
   }
 
-  const handleMotivationToggle = (value) => {
-    setFormData((prev) => ({
-      ...prev,
-      acquisitionMotivations: prev.acquisitionMotivations.includes(value)
-        ? prev.acquisitionMotivations.filter((m) => m !== value)
-        : [...prev.acquisitionMotivations, value],
-    }))
+  // 标记完成 - 供外部调用
+  const _handleComplete = async () => {
+    if (isCompleted || matches.length === 0 || !onComplete) return
+    setIsCompleted(true)
+
+    const outputData = {
+      completedAt: new Date().toISOString(),
+      matchCount: matches.length,
+      topMatches: matches.slice(0, 5).map(m => ({
+        company: m.company,
+        industry: m.industry,
+        region: m.region,
+        matchScore: m.matchScore,
+      })),
+    }
+    await savePhaseData(outputData)
+    onComplete()
   }
 
   // Automatic matching based on business relevance and enterprise scale
@@ -184,13 +202,6 @@ export default function AIMatchmaker({ onComplete }) {
     }
   }
 
-  // Automatic matching on mount
-  useEffect(() => {
-    if (isAutoMatch && allDeals.length > 0) {
-      handleAutoMatch()
-    }
-  }, [])
-
   const handleAutoMatch = () => {
     setIsMatching(true)
     setMatches([])
@@ -201,16 +212,64 @@ export default function AIMatchmaker({ onComplete }) {
         return { ...deal, matchScore: score, dimensionScores, matchReasons: reasons, riskFactors }
       })
 
-      // Sort by score - prioritize business relevance and enterprise scale
       matchedDeals.sort((a, b) => b.matchScore - a.matchScore)
-
-      // Get Top 6 matches - larger enterprises first
       const topMatches = matchedDeals.filter((d) => d.matchScore >= 40).slice(0, 6)
 
       setMatches(topMatches)
       setIsMatching(false)
     }, 2000)
   }
+
+  const handleMotivationToggle = (value) => {
+    setFormData((prev) => ({
+      ...prev,
+      acquisitionMotivations: prev.acquisitionMotivations.includes(value)
+        ? prev.acquisitionMotivations.filter((m) => m !== value)
+        : [...prev.acquisitionMotivations, value],
+    }))
+  }
+
+  // Automatic matching on mount
+  useEffect(() => {
+    if (allDeals.length > 0) {
+      handleAutoMatch()
+    }
+  }, [])
+
+  // 加载已有的阶段数据
+  useEffect(() => {
+    if (!projectId) return
+
+    const loadPhaseData = async () => {
+      try {
+        const api = getApi()
+        const response = await api.getProjectPhases(projectId)
+        if (response.success !== false && response.data) {
+          const matchPhase = response.data.find(p => p.phase === 'match')
+          if (matchPhase && matchPhase.output_data) {
+            const outputData = typeof matchPhase.output_data === 'string'
+              ? JSON.parse(matchPhase.output_data)
+              : matchPhase.output_data
+            if (outputData.topMatches && Array.isArray(outputData.topMatches)) {
+              const loadedMatches = outputData.topMatches.map(m => ({
+                ...m,
+                id: `loaded-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                matchScore: m.matchScore,
+              }))
+              setMatches(loadedMatches)
+            }
+            if (outputData.completedAt) {
+              setIsCompleted(true)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('加载匹配数据失败:', error)
+      }
+    }
+
+    loadPhaseData()
+  }, [projectId])
 
   return (
     <div className="space-y-6">

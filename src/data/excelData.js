@@ -1,6 +1,7 @@
 // Excel导入数据存储
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { getApi } from '../services/api'
 
 // Excel列名映射配置
 export const columnMappings = {
@@ -103,8 +104,97 @@ const useExcelDataStore = create(
       // 导入历史
       importHistory: [],
 
-      // 添加导入的数据
-      addImportedDeals: (deals) =>
+      // 同步状态: 'synced' | 'pending' | 'error'
+      syncStatus: 'synced',
+
+      // 最后同步时间
+      lastSyncTime: null,
+
+      // 最后同步错误
+      lastSyncError: null,
+
+      // 同步到服务器
+      syncToServer: async () => {
+        const { importedDeals } = get()
+
+        if (importedDeals.length === 0) {
+          return { success: true, data: { importedCount: 0 } }
+        }
+
+        set({ syncStatus: 'pending' })
+
+        try {
+          const api = getApi()
+          const result = await api.post('/imports/sync', { records: importedDeals })
+
+          if (result.success) {
+            set({
+              syncStatus: 'synced',
+              lastSyncTime: new Date().toISOString(),
+              lastSyncError: null,
+            })
+          } else {
+            set({
+              syncStatus: 'error',
+              lastSyncError: result.error || '同步失败',
+            })
+          }
+
+          return result
+        } catch (error) {
+          set({
+            syncStatus: 'error',
+            lastSyncError: error.message || '网络请求失败',
+          })
+          return {
+            success: false,
+            error: error.message || '网络请求失败',
+          }
+        }
+      },
+
+      // 从服务器获取数据
+      fetchFromServer: async () => {
+        try {
+          const api = getApi()
+          const result = await api.get('/imports/excel-projects')
+
+          if (result.success && result.data) {
+            // 将服务器数据转换为前端格式
+            const serverDeals = result.data.map((project) => ({
+              id: project.id,
+              company: project.company_name || project.name,
+              title: project.name,
+              industry: project.industry || '其他',
+              region: project.region || '全国',
+              valuation: parseFloat(project.estimated_value) || 0,
+              stage: JSON.parse(project.change_records || '{}')?.stage || '意向',
+              description: project.sell_motivation || '',
+              highlights: JSON.parse(project.change_records || '{}')?.highlights || [],
+              type: project.company_type === '买方' ? 'buy' : 'sell',
+              date: project.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+              status: '已同步',
+              isImported: true,
+              isSynced: true,
+            }))
+
+            set({ lastSyncTime: new Date().toISOString() })
+            return { success: true, data: serverDeals }
+          }
+
+          return { success: false, data: [] }
+        } catch (error) {
+          console.error('[ExcelData] fetchFromServer error:', error)
+          return {
+            success: false,
+            error: error.message || '网络请求失败',
+          }
+        }
+      },
+
+      // 添加导入的数据（自动同步到服务器）
+      addImportedDeals: async (deals) => {
+        // 先保存到本地
         set((state) => ({
           importedDeals: [...state.importedDeals, ...deals],
           importHistory: [
@@ -116,10 +206,26 @@ const useExcelDataStore = create(
             },
             ...state.importHistory.slice(0, 9),
           ],
-        })),
+        }))
+
+        // 尝试同步到服务器
+        try {
+          const api = getApi()
+          const result = await api.post('/imports/sync', { records: deals })
+
+          if (result.success) {
+            set({ syncStatus: 'synced', lastSyncTime: new Date().toISOString() })
+          } else {
+            set({ syncStatus: 'pending' })
+          }
+        } catch {
+          // 网络失败，标记为待同步
+          set({ syncStatus: 'pending' })
+        }
+      },
 
       // 清空导入数据
-      clearImportedDeals: () => set({ importedDeals: [] }),
+      clearImportedDeals: () => set({ importedDeals: [], syncStatus: 'synced' }),
 
       // 删除单条导入数据
       removeImportedDeal: (id) =>
@@ -135,11 +241,13 @@ const useExcelDataStore = create(
 
       // 获取导入统计数据
       getImportStats: () => {
-        const { importedDeals, importHistory } = get()
+        const { importedDeals, importHistory, syncStatus, lastSyncTime } = get()
         return {
           totalImported: importedDeals.length,
           totalFiles: importHistory.length,
           recentImports: importHistory.slice(0, 5),
+          syncStatus,
+          lastSyncTime,
         }
       },
     }),

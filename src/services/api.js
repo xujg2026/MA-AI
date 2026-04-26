@@ -204,6 +204,99 @@ class ApiService {
   deleteProtocol(protocolId) {
     return this.request('DELETE', `/protocol/${protocolId}`)
   }
+
+  // ========== 项目管理 ==========
+
+  /**
+   * 创建项目
+   * POST /api/projects
+   */
+  createProject(projectData) {
+    return this.post('/projects', projectData)
+  }
+
+  /**
+   * 获取项目列表
+   * GET /api/projects
+   */
+  getProjects(params) {
+    return this.get('/projects', params)
+  }
+
+  /**
+   * 获取项目详情
+   * GET /api/projects/:id
+   */
+  getProject(id) {
+    return this.get(`/projects/${id}`)
+  }
+
+  /**
+   * 更新项目
+   * PUT /api/projects/:id
+   */
+  updateProject(id, projectData) {
+    return this.request('PUT', `/projects/${id}`, projectData)
+  }
+
+  /**
+   * 删除项目
+   * DELETE /api/projects/:id
+   */
+  deleteProject(id) {
+    return this.request('DELETE', `/projects/${id}`)
+  }
+
+  // ========== 项目阶段 ==========
+
+  /**
+   * 保存项目阶段数据
+   * POST /api/projects/:id/phases
+   * @param {string} projectId - 项目ID
+   * @param {string} phase - 阶段标识: protocol, due-diligence, valuation, match, report
+   * @param {object} outputData - 阶段产出数据
+   */
+  saveProjectPhase(projectId, phase, outputData) {
+    return this.post(`/projects/${projectId}/phases`, {
+      phase,
+      output_data: outputData,
+    })
+  }
+
+  /**
+   * 获取项目阶段数据
+   * GET /api/projects/:id/phases
+   */
+  getProjectPhases(projectId) {
+    return this.get(`/projects/${projectId}/phases`)
+  }
+
+  /**
+   * 归集觅售结果到项目
+   * POST /api/projects/:id/finder-result
+   */
+  saveFinderResult(projectId, finderResult) {
+    return this.post(`/projects/${projectId}/finder-result`, finderResult)
+  }
+
+  // ========== Excel 导入 ==========
+
+  /**
+   * 同步导入数据到服务器
+   * POST /api/imports/sync
+   * @param {Array} records - 要同步的记录数组
+   */
+  syncImportRecords(records) {
+    return this.post('/imports/sync', { records })
+  }
+
+  /**
+   * 获取导入的项目列表
+   * GET /api/imports/excel-projects
+   */
+  getExcelProjects() {
+    return this.get('/imports/excel-projects')
+  }
 }
 
 // 导出单例

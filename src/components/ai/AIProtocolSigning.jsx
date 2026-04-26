@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   FileSignature,
   Upload,
@@ -13,59 +13,89 @@ import {
   Loader2,
 } from 'lucide-react'
 import { Card, Button, Badge } from '../ui'
+import { getApi } from '../../services/api'
 
 const PROTOCOL_TYPES = [
   {
-    key: 'ma',
-    label: '并购协议',
-    desc: 'M&A Agreement',
-    icon: '🤝',
-    description: '收购方与目标公司签署的并购意向/正式协议',
+    key: 'ts',
+    label: '投资意向书',
+    desc: 'Term Sheet',
+    icon: '📋',
+    description: '投资条款清单，通常在尽职调查前签署',
   },
   {
     key: 'nda',
-    label: 'NDA/保密协议',
+    label: '保密协议',
     desc: 'Non-Disclosure Agreement',
     icon: '🔒',
     description: '尽职调查前双方保密义务协议',
   },
   {
-    key: 'ts',
-    label: 'TS/投资意向书',
-    desc: 'Term Sheet',
-    icon: '📋',
-    description: '投资条款清单，通常在尽职调查前签署',
+    key: 'other',
+    label: '其他',
+    desc: 'Other Documents',
+    icon: '📄',
+    description: '其他并购相关协议或文件',
   },
 ]
 
-const mockProtocols = [
-  {
-    id: 'protocol-001',
-    name: '深圳华测检测并购协议_v1.2.pdf',
-    type: 'ma',
-    uploadTime: '2026-04-20 14:30:22',
-    signers: ['收购方-A'],
-    status: 'signed',
-    fileSize: '2.4 MB',
-  },
-  {
-    id: 'protocol-002',
-    name: '尽调保密协议_标准版.pdf',
-    type: 'nda',
-    uploadTime: '2026-04-18 09:15:00',
-    signers: ['收购方-A'],
-    status: 'pending',
-    fileSize: '856 KB',
-  },
-]
-
-export default function AIProtocolSigning({ onComplete }) {
-  const [protocols, setProtocols] = useState(mockProtocols)
+export default function AIProtocolSigning({ projectId, onComplete }) {
+  const [protocols, setProtocols] = useState([])
   const [selectedType, setSelectedType] = useState(null)
   const [isUploading, setIsUploading] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const fileInputRef = useRef(null)
   const [selectedFile, setSelectedFile] = useState(null)
+
+  // 加载已有的协议数据
+  useEffect(() => {
+    if (!projectId) return
+
+    // 切换项目时先清空旧数据
+    setProtocols([])
+
+    const loadPhaseData = async () => {
+      try {
+        console.log('[Protocol] Loading phase data for project:', projectId)
+        const api = getApi()
+        const response = await api.getProjectPhases(projectId)
+        console.log('[Protocol] Load response:', response)
+        if (response.success !== false && response.data) {
+          const protocolPhase = response.data.find(p => p.phase === 'protocol')
+          console.log('[Protocol] Found protocol phase:', protocolPhase)
+          if (protocolPhase && protocolPhase.output_data) {
+            const outputData = typeof protocolPhase.output_data === 'string'
+              ? JSON.parse(protocolPhase.output_data)
+              : protocolPhase.output_data
+            console.log('[Protocol] Parsed outputData:', outputData)
+            if (outputData.protocols && Array.isArray(outputData.protocols)) {
+              setProtocols(outputData.protocols)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('加载协议数据失败:', error)
+      }
+    }
+
+    loadPhaseData()
+  }, [projectId])
+
+  // 保存阶段数据到项目
+  const savePhaseData = async (outputData) => {
+    if (!projectId) {
+      console.error('[Protocol] savePhaseData: projectId is missing')
+      return
+    }
+    try {
+      console.log('[Protocol] Saving phase data for project:', projectId, outputData)
+      const api = getApi()
+      const result = await api.saveProjectPhase(projectId, 'protocol', outputData)
+      console.log('[Protocol] Save result:', result)
+    } catch (error) {
+      console.error('保存协议签署阶段数据失败:', error)
+    }
+  }
 
   const handleTypeSelect = (typeKey) => {
     setSelectedType(typeKey)
@@ -104,7 +134,25 @@ export default function AIProtocolSigning({ onComplete }) {
       fileSize: `${(selectedFile.size / 1024).toFixed(0)} KB`,
     }
 
-    setProtocols((prev) => [newProtocol, ...prev])
+    // 使用函数式更新获取最新状态
+    const updatedProtocols = [newProtocol, ...protocols]
+
+    // 立即保存到后端
+    const outputData = {
+      completedAt: new Date().toISOString(),
+      protocols: updatedProtocols.map(p => ({
+        id: p.id,
+        name: p.name,
+        type: p.type,
+        status: p.status,
+        signers: p.signers,
+        uploadTime: p.uploadTime,
+        fileSize: p.fileSize,
+      })),
+    }
+    setProtocols(updatedProtocols)
+    savePhaseData(outputData)
+
     setIsUploading(false)
     setShowUploadModal(false)
     setSelectedType(null)
@@ -112,6 +160,7 @@ export default function AIProtocolSigning({ onComplete }) {
   }
 
   const handleSign = async (protocolId) => {
+    // 先更新为 signing 状态
     setProtocols((prev) =>
       prev.map((p) =>
         p.id === protocolId ? { ...p, status: 'signing' } : p
@@ -121,21 +170,51 @@ export default function AIProtocolSigning({ onComplete }) {
     // Simulate signing delay
     await new Promise((resolve) => setTimeout(resolve, 2000))
 
-    setProtocols((prev) =>
-      prev.map((p) =>
-        p.id === protocolId ? { ...p, status: 'signed' } : p
-      )
+    // 更新为 signed 状态并保存
+    const updatedProtocols = protocols.map((p) =>
+      p.id === protocolId ? { ...p, status: 'signed' } : p
     )
 
-    // Check if all protocols are signed
-    const allSigned = protocols.every((p) => p.status === 'signed')
+    // 保存阶段数据
+    const outputData = {
+      completedAt: new Date().toISOString(),
+      protocols: updatedProtocols.map(p => ({
+        id: p.id,
+        name: p.name,
+        type: p.type,
+        status: p.status,
+        signers: p.signers,
+        uploadTime: p.uploadTime,
+        fileSize: p.fileSize,
+      })),
+    }
+    setProtocols(updatedProtocols)
+    savePhaseData(outputData)
+
+    // 检查是否全部签署完成
+    const allSigned = updatedProtocols.every((p) => p.status === 'signed')
     if (allSigned && onComplete) {
       onComplete()
     }
   }
 
   const handleDelete = (protocolId) => {
-    setProtocols((prev) => prev.filter((p) => p.id !== protocolId))
+    const updatedProtocols = protocols.filter((p) => p.id !== protocolId)
+    setProtocols(updatedProtocols)
+
+    // 同步删除到后端
+    const outputData = {
+      protocols: updatedProtocols.map(p => ({
+        id: p.id,
+        name: p.name,
+        type: p.type,
+        status: p.status,
+        signers: p.signers,
+        uploadTime: p.uploadTime,
+        fileSize: p.fileSize,
+      })),
+    }
+    savePhaseData(outputData)
   }
 
   const getStatusBadge = (status) => {

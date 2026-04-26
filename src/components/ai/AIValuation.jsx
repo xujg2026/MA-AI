@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { dcfTemplate } from '../../data/mockData'
 import { Card, Button, Input, Badge } from '../ui'
+import { getApi } from '../../services/api'
 import {
   Calculator,
   TrendingUp,
@@ -11,9 +12,10 @@ import {
   BarChart3,
   Target,
   ArrowDownUp,
+  CheckCircle,
 } from 'lucide-react'
 
-export default function AIValuation({ onComplete }) {
+export default function AIValuation({ projectId, onComplete }) {
   const [method, setMethod] = useState('dcf')
   const [formData, setFormData] = useState({
     revenue: 10,
@@ -37,6 +39,65 @@ export default function AIValuation({ onComplete }) {
   })
   const [result, setResult] = useState(null)
   const [showSensitivity, setShowSensitivity] = useState(false)
+  const [isCompleted, setIsCompleted] = useState(false)
+
+  // 加载已有的阶段数据
+  useEffect(() => {
+    if (!projectId) return
+
+    const loadPhaseData = async () => {
+      try {
+        const api = getApi()
+        const response = await api.getProjectPhases(projectId)
+        if (response.success !== false && response.data) {
+          const valuationPhase = response.data.find(p => p.phase === 'valuation')
+          if (valuationPhase && valuationPhase.output_data) {
+            const outputData = typeof valuationPhase.output_data === 'string'
+              ? JSON.parse(valuationPhase.output_data)
+              : valuationPhase.output_data
+            if (outputData.method) {
+              setMethod(outputData.method)
+            }
+            if (outputData.result) {
+              setResult(outputData.result)
+            }
+            if (outputData.completedAt) {
+              setIsCompleted(true)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('加载估值数据失败:', error)
+      }
+    }
+
+    loadPhaseData()
+  }, [projectId])
+
+  // 保存阶段数据到项目
+  const savePhaseData = async (outputData) => {
+    if (!projectId) return
+    try {
+      const api = getApi()
+      await api.saveProjectPhase(projectId, 'valuation', outputData)
+    } catch (error) {
+      console.error('保存企业估值阶段数据失败:', error)
+    }
+  }
+
+  // 标记完成
+  const handleComplete = async () => {
+    if (isCompleted || !result || !onComplete) return
+    setIsCompleted(true)
+
+    const outputData = {
+      completedAt: new Date().toISOString(),
+      method,
+      result: result,
+    }
+    await savePhaseData(outputData)
+    onComplete()
+  }
 
   const calculateDCF = () => {
     const { revenue, growthRate, operatingMargin, discountRate, terminalGrowthRate, years } = formData
@@ -312,6 +373,17 @@ export default function AIValuation({ onComplete }) {
           >
             开始估值计算
           </Button>
+          {result && (
+            <Button
+              variant="success"
+              className="w-full mt-4"
+              icon={CheckCircle}
+              onClick={handleComplete}
+              disabled={isCompleted}
+            >
+              {isCompleted ? '估值已完成' : '完成估值'}
+            </Button>
+          )}
         </Card>
 
         {/* Results */}
