@@ -16,7 +16,9 @@ import { qccRouter } from './routes/qcc.js'
 import { stockDiagnosisRouter } from './routes/stockDiagnosis.js'
 import { protocolRouter } from './routes/protocol.js'
 import { projectsRouter } from './routes/projects.js'
+import { ticCompaniesRouter } from './routes/ticCompanies.js'
 import { importsRouter } from './routes/imports.js'
+import { cncaCertificationRouter } from './routes/cncaCertification.js'
 import { runMXSkillSimple } from './utils/mxSkillRunner.js'
 
 const app = express()
@@ -36,7 +38,9 @@ app.use('/api/search', financialSearchRouter)
 app.use('/api/diagnosis', stockDiagnosisRouter)
 app.use('/api/protocol', protocolRouter)
 app.use('/api/projects', projectsRouter)
+app.use('/api/tic-companies', ticCompaniesRouter)
 app.use('/api/imports', importsRouter)
+app.use('/api/cnca-certification', cncaCertificationRouter)
 
 // Health check
 app.get('/api/health', (req, res) => {
