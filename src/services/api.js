@@ -299,6 +299,37 @@ class ApiService {
   getExcelProjects() {
     return this.get('/imports/excel-projects')
   }
+
+  // ========== TIC 企业查询 ==========
+
+  /**
+   * 获取TIC企业列表
+   * GET /api/tic-companies
+   * @param {object} params - 查询参数
+   */
+  getTicCompanies(params) {
+    const query = new URLSearchParams(params).toString()
+    return this.get(`/tic-companies?${query}`)
+  }
+
+  // ========== CNCA 认证查询 ==========
+
+  /**
+   * 批量验证 CNCA 认证状态
+   * POST /api/cnca-certification/verify-batch
+   * @param {Array} companies - [{ name: string, creditCode: string }]
+   */
+  verifyCncaCertification(companies) {
+    return this.post('/cnca-certification/verify-batch', { companies })
+  }
+
+  /**
+   * 查询单家企业 CNCA 认证状态（从缓存）
+   * GET /api/cnca-certification/status/:companyName
+   */
+  getCncaCertStatus(companyName) {
+    return this.get(`/cnca-certification/status/${encodeURIComponent(companyName)}`)
+  }
 }
 
 // 导出单例
