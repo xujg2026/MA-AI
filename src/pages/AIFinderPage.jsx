@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Search, Building2, Key, Users, TrendingUp, FileText, Sparkles, Filter, ArrowRight, Shield, Award, MapPin, CheckCircle, FolderPlus } from 'lucide-react'
+import { Search, Building2, Key, Users, TrendingUp, FileText, Sparkles, Filter, ArrowRight, Shield, Award, MapPin, CheckCircle, FolderPlus, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Card, Button, Input, Badge } from '../components/ui'
 import ProjectSelector from '../components/projects/ProjectSelector'
+import { getApi } from '../services/api'
 
 const companyTypes = ['民营企业', '国有企业', '外资企业', '合资企业', '上市公司', '非上市公司']
 
@@ -119,6 +120,10 @@ export default function AIFinderPage() {
   const [selectedDeal, setSelectedDeal] = useState(null)
   const [showProjectSelector, setShowProjectSelector] = useState(false)
 
+  // CNCA 认证状态
+  const [cncaResults, setCncaResults] = useState({}) // { companyName: CncaCertResult }
+  const [isVerifyingCnca, setIsVerifyingCnca] = useState(false)
+
   useState(() => {
     setTimeout(() => setIsLoaded(true), 100)
   }, [])
@@ -172,6 +177,31 @@ export default function AIFinderPage() {
     })
     setSearchResults([])
     setHasSearched(false)
+  }
+
+  // CNCA refresh handler
+  const handleRefreshCnca = async () => {
+    if (searchResults.length === 0) return
+    setIsVerifyingCnca(true)
+    try {
+      const companies = searchResults.map(deal => ({
+        name: deal.company_name || deal.company,
+        creditCode: deal.credit_code || ''
+      }))
+      const api = getApi()
+      const response = await api.verifyCncaCertification(companies)
+      if (response.success && response.data) {
+        const newResults = {}
+        response.data.forEach(cert => {
+          newResults[cert.name] = cert
+        })
+        setCncaResults(prev => ({ ...prev, ...newResults }))
+      }
+    } catch (error) {
+      console.error('CNCA verification failed:', error)
+    } finally {
+      setIsVerifyingCnca(false)
+    }
   }
 
   return (
@@ -514,7 +544,17 @@ export default function AIFinderPage() {
                               {deal.company.charAt(0)}
                             </div>
                             <div>
-                              <h3 className="font-bold text-gray-900 group-hover:text-primary transition-colors">{deal.company}</h3>
+                              <h3
+                                className={`font-bold text-gray-900 group-hover:text-primary transition-colors ${cncaResults[deal.company]?.hasCertification ? 'cursor-pointer' : ''}`}
+                                onClick={() => {
+                                  const cert = cncaResults[deal.company]
+                                  if (cert?.hasCertification && cert?.detailUrl) {
+                                    window.open(cert.detailUrl, '_blank', 'noopener,noreferrer')
+                                  }
+                                }}
+                              >
+                                {deal.company}
+                              </h3>
                               <p className="text-sm text-gray-500">{deal.title}</p>
                             </div>
                           </div>
@@ -546,6 +586,39 @@ export default function AIFinderPage() {
                             )}
                           </div>
                         )}
+
+                        {/* CNCA 认证状态 */}
+                        <div className="mb-4 p-3 bg-gray-50 rounded-lg border-l-4 border-primary">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Shield size={16} className={
+                                cncaResults[deal.company]?.hasCertification === true ? 'text-green-600' :
+                                cncaResults[deal.company]?.hasCertification === false ? 'text-red-500' :
+                                'text-gray-400'
+                              } />
+                              <span className="text-sm font-medium">
+                                {cncaResults[deal.company] === undefined ? 'CNCA认证：未验证' :
+                                 cncaResults[deal.company]?.hasCertification ? '已认证' : '无认证'}
+                              </span>
+                              {cncaResults[deal.company]?.hasCertification && cncaResults[deal.company]?.certNo && (
+                                <span className="text-xs text-gray-500 ml-2">
+                                  {cncaResults[deal.company].certNo}
+                                </span>
+                              )}
+                            </div>
+                            {cncaResults[deal.company]?.hasCertification && cncaResults[deal.company]?.detailUrl ? (
+                              <a
+                                href={cncaResults[deal.company].detailUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm text-primary hover:underline flex items-center gap-1"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                查看详情 <ArrowRight size={12} />
+                              </a>
+                            ) : null}
+                          </div>
+                        </div>
 
                         <div className="grid grid-cols-2 gap-3 mb-4">
                           <div className="text-center p-3 bg-gray-50 rounded-xl group-hover:bg-gray-100 transition-colors">
@@ -585,6 +658,22 @@ export default function AIFinderPage() {
                     </Card>
                   ))}
                 </div>
+
+                {/* Floating CNCA Refresh Button */}
+                {hasSearched && searchResults.length > 0 && (
+                  <button
+                    onClick={handleRefreshCnca}
+                    disabled={isVerifyingCnca || isSearching}
+                    className="fixed bottom-4 right-4 bg-primary text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isVerifyingCnca ? (
+                      <span className="animate-spin">⟳</span>
+                    ) : (
+                      <Shield size={16} />
+                    )}
+                    {isVerifyingCnca ? '验证中...' : '刷新认证状态'}
+                  </button>
+                )}
               </div>
             ) : hasSearched && searchResults.length === 0 ? (
               <Card padding="lg" className="text-center">
