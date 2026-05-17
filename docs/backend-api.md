@@ -192,7 +192,147 @@ Query 参数：
 - 上游超时
 - SSE 解析失败
 
-## 7. 前端对接位置
+## 7. QCC 企业情报
+
+### 7.1 配置状态
+
+`GET /api/qcc/status`
+
+返回示例：
+
+```json
+{
+  "success": true,
+  "data": {
+    "configured": true
+  }
+}
+```
+
+### 7.2 企业综合情报
+
+`POST /api/qcc/company-intelligence`
+
+请求体：
+
+```json
+{
+  "companyName": "华测检测"
+}
+```
+
+说明：
+
+- 后端会并行请求 QCC 的 `company / risk / ipr / operation` 多个服务
+- 返回字段较多，前端当前主要消费：
+  - `companyInfo`
+  - `shareholderInfo`
+  - `actualController`
+  - `dishonestInfo`
+  - `caseFilingInfo`
+  - `businessException`
+  - `administrativePenalty`
+  - `patentInfo`
+  - `trademarkInfo`
+  - `qualifications`
+  - `biddingInfo`
+
+常见错误：
+
+- `QCC_API_KEY is not configured`
+- 上游超时
+- SSE 解析失败
+
+## 8. CNCA 认证状态查询
+
+### 8.1 批量验证企业认证状态
+
+`POST /api/cnca-certification/verify-batch`
+
+请求体：
+
+```json
+{
+  "companies": [
+    { "name": "上海英格尔认证有限公司", "creditCode": "911101018012144040" }
+  ]
+}
+```
+
+响应：
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "name": "上海英格尔认证有限公司",
+      "creditCode": "911101018012144040",
+      "hasCertification": true,
+      "certNo": "CNCA-R-2002-087",
+      "instCode": "CNCA-R-2002-087",
+      "orgCode": "911101018012144040",
+      "detailUrl": "https://cx.cnca.cn/CertECloud/institutionBody/authenticetionDetil?id=67&instCode=CNCA-R-2002-087&orgCode=911101018012144040"
+    }
+  ]
+}
+```
+
+依赖：`@modelcontextprotocol/server-puppeteer` (Puppeteer MCP)
+
+### 8.2 查询缓存状态
+
+`GET /api/cnca-certification/status/:companyName`
+
+响应：
+
+```json
+{
+  "success": true,
+  "data": {
+    "hasCertification": true,
+    "certNo": "CNCA-R-2002-087",
+    "cached": true
+  }
+}
+```
+
+## 9. TIC 企业查询
+
+`GET /api/tic-companies`
+
+查询参数：
+
+| 参数 | 类型 | 说明 |
+|-----|------|-----|
+| keyword | string | 企业名称关键字搜索 |
+| industry | string | 行业门类筛选 |
+| province | string | 省份筛选 |
+| city | string | 城市筛选 |
+| county | string | 区县筛选 |
+| companyType | string | 企业类型筛选 |
+| employeeCountMin | number | 最小参保人数 |
+| employeeCountMax | number | 最大参保人数 |
+| hasPhone | string | 联系电话筛选（有/无） |
+| hasWebsite | string | 网址筛选（有/无） |
+| businessScope | string | 经营范围模糊搜索 |
+| page | number | 页码，默认1 |
+| pageSize | number | 每页条数，默认20 |
+
+## 10. 项目管理
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/projects` | 项目列表（支持分页、状态筛选） |
+| GET | `/api/projects/:id` | 项目详情 |
+| POST | `/api/projects` | 创建项目 |
+| PUT | `/api/projects/:id` | 更新项目 |
+| DELETE | `/api/projects/:id` | 删除项目 |
+| GET | `/api/projects/:id/phases` | 项目阶段列表 |
+| PUT | `/api/projects/:id/phases` | 更新项目阶段 |
+| POST | `/api/imports/excel` | Excel 批量导入项目 |
+
+## 11. 前端对接位置
 
 当前前端 API 包装集中在：
 

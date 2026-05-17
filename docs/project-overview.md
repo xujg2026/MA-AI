@@ -65,7 +65,7 @@ Browser
 | 路由 | 页面文件 | 数据来源 | 当前状态 |
 | --- | --- | --- | --- |
 | `/` | `src/pages/HomePage.jsx` | 静态 + mock | 首页展示页 |
-| `/ai-finder` | `src/pages/AIFinderPage.jsx` | mock | AI 觅售筛选页，未接后端 |
+| `/ai-finder` | `src/pages/AIFinderPage.jsx` | `/api/tic-companies` + CNCA | TIC 企业查询，已接真实后端 |
 | `/buyer-matching` | `src/pages/BuyerMatchingPage.jsx` | 混合 | AI 交易流程容器页 |
 | `/buyer-match-input` | `src/pages/BuyerMatchInputPage.jsx` | `/api/buyer/screening-agent` | 已接真实后端 |
 | `/deals` | `src/pages/DealsPage.jsx` | `mockData + excelData` | 案例库，可叠加导入数据 |
@@ -73,6 +73,8 @@ Browser
 | `/data-management` | `src/pages/DataManagementPage.jsx` | `xlsx + zustand` | 本地导入/录入管理 |
 | `/news` | `src/pages/NewsPage.jsx` | `newsService` mock | 资讯页，当前为本地模拟 |
 | `/ai-due-diligence` | `src/pages/AIDueDiligencePage.jsx` | `QCC + mock checklist` | 尽调分析/推荐书入口 |
+| `/projects` | `src/pages/ProjectListPage.jsx` | `/api/projects` | 项目列表页 |
+| `/projects/:id` | `src/pages/ProjectDetailPage.jsx` | `/api/projects/:id` | 项目详情页 |
 | `/about` | `src/pages/AboutPage.jsx` | 静态 | 关于页 |
 
 ## 6. 后端模块地图
@@ -87,6 +89,10 @@ Browser
 | `/api/search/*` | `server/src/routes/financialSearch.ts` | `mx-finance-search` | 财经/并购资讯搜索 |
 | `/api/diagnosis/*` | `server/src/routes/stockDiagnosis.ts` | `stock-diagnosis` | 股票诊断 |
 | `/api/qcc/*` | `server/src/routes/qcc.ts` | `server/src/services/qccApi.ts` | 企查查企业情报 |
+| `/api/cnca-certification/*` | `server/src/routes/cncaCertification.ts` | Puppeteer MCP | CNCA 认证状态查询 |
+| `/api/tic-companies` | `server/src/routes/ticCompanies.ts` | 本地 SQLite | TIC 企业查询 |
+| `/api/projects/*` | `server/src/routes/projects.ts` | 本地 SQLite | 项目管理 CRUD |
+| `/api/imports/*` | `server/src/routes/imports.ts` | 本地 SQLite | Excel 导入 |
 
 ## 7. MX Skills 能力地图
 

@@ -1,6 +1,6 @@
 # 开发总结
 
-**最后更新:** 2026-04-26
+**最后更新:** 2026-05-16
 
 ---
 
@@ -168,7 +168,72 @@ QCC_API_BASE_URL=https://agent.qcc.com/mcp
 
 ---
 
-## 九、项目管理模块修复 (2026-04-26)
+## 十、CNCA 认证状态查询 (2026-05-16)
+
+### 功能概述
+在 AI 觅售（TIC 企业查询）页面中，为每家企业增加 CNCA 认证资质查询功能。
+
+### 新增文件
+| 文件 | 说明 |
+|------|------|
+| `server/src/routes/cncaCertification.ts` | CNCA 认证 API 路由 (Puppeteer MCP 爬取) |
+| `server/src/utils/cncaCache.ts` | 认证状态缓存工具 (24h TTL) |
+| `server/data/cnca_cache.db` | CNCA 认证缓存数据库 |
+
+### API 接口
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/cnca-certification/verify-batch` | 批量验证企业 CNCA 认证状态 |
+| GET | `/api/cnca-certification/status/:companyName` | 查询单家企业缓存状态 |
+
+### 前端功能
+- 企业卡片显示认证状态 Badge（有认证/无认证/未验证）
+- 右下角浮动"刷新认证状态"按钮
+- 有认证企业名称可点击跳转 CNCA 详情页
+- 认证结果缓存 24 小时
+
+### 依赖
+- `@modelcontextprotocol/server-puppeteer` — Puppeteer MCP server
+- `POST /verify-batch` 调用 `npx -y @modelcontextprotocol/server-puppeteer` 进行页面爬取
+
+---
+
+## 十一、TIC 企业数据库集成 (2026-05-16)
+
+### 功能概述
+将 `Source/TIC company info.xlsx` 数据导入本地 SQLite，实现 TIC 企业查询功能。
+
+### 新增文件
+| 文件 | 说明 |
+|------|------|
+| `server/src/utils/ticCompanyDb.ts` | TIC 企业数据库工具 |
+| `server/src/scripts/initTicCompaniesDb.ts` | 数据初始化脚本 |
+| `server/src/routes/ticCompanies.ts` | TIC 企业查询 API |
+
+### 数据库表结构
+`tic_companies` 表 — 55,574 条企业数据，包含：
+- 基本信息：企业名称、经营状态、法定代表人、注册资本、成立日期
+- 地区信息：省、市、区县、注册地址
+- 联系方式：电话、邮箱、网址
+- 行业分类：国标行业门类/大类/中类/小类
+- 风险字段：失信被执行人、被执行人、限制高消费、司法冻结、经营异常等
+
+### API 接口
+`GET /api/tic-companies` — 支持多条件筛选：
+- keyword, industry, province, city, county, companyType
+- employeeCountMin/Max, hasPhone, hasWebsite, businessScope
+- page, pageSize 分页
+
+### 前端变更
+AIFinderPage 重构为 TIC 企业查询：
+- 保留：行业、关键字、企业性质、社保人数、注册资本、成立日期
+- 新增：联系电话、网址、经营范围、地区三级联动
+- 删除：CMA/CNAS资质、融资、风险标签等不支持的字段
+- 卡片显示真实数据库字段
+
+---
+
+## 十二、项目管理模块修复 (2026-04-26)
 
 ### 新增文件
 

@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import { Search, Building2, Key, Users, TrendingUp, FileText, Sparkles, Filter, ArrowRight, Shield, Award, MapPin, CheckCircle, FolderPlus } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Search, Building2, Key, Users, TrendingUp, FileText, Sparkles, Filter, ArrowRight, Shield, Award, MapPin, CheckCircle, FolderPlus, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Card, Button, Input, Badge } from '../components/ui'
 import ProjectSelector from '../components/projects/ProjectSelector'
+import { getApi } from '../services/api'
 
 const companyTypes = ['民营企业', '国有企业', '外资企业', '合资企业', '上市公司', '非上市公司']
 
@@ -86,31 +87,27 @@ const mockDeals = [
 
 export default function AIFinderPage() {
   const [formData, setFormData] = useState({
-    industry: '',
     keyword: '',
     companyType: '',
     socialSecurity: '',
-    registeredCapital: '',
+    registeredCapitalMin: 0,
+    registeredCapitalMax: 10000,
     establishmentDate: '',
-    // TIC资质
-    hasCMA: false,
-    hasCNAS: false,
-    certCount: '',
-    labArea: '',
-    testingScope: '',
-    mainTestingArea: '',
-    customerIndustry: '',
-    // 融资相关
-    hasFinancing: '',
-    financingDate: '',
-    investor: '',
-    financingAmount: '',
-    // 风险
-    riskLevel: '',
-    changeRecords: '',
-    contactPerson: '',
-    contactMethod: '',
+    hasPhone: '',
+    hasWebsite: '',
+    businessScope: '',
+    province: '',
+    city: '',
+    county: '',
   })
+
+  // Region cascade state
+  const [provinces, setProvinces] = useState([])
+  const [cities, setCities] = useState([])
+  const [counties, setCounties] = useState([])
+  const [selectedProvince, setSelectedProvince] = useState('')
+  const [selectedCity, setSelectedCity] = useState('')
+  const [selectedCounty, setSelectedCounty] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [isSearching, setIsSearching] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
@@ -119,9 +116,169 @@ export default function AIFinderPage() {
   const [selectedDeal, setSelectedDeal] = useState(null)
   const [showProjectSelector, setShowProjectSelector] = useState(false)
 
-  useState(() => {
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(0)
+  const [totalCount, setTotalCount] = useState(0)
+  const [pageSize] = useState(20)
+
+  // CNCA 认证状态
+  const [cncaResults, setCncaResults] = useState({}) // { companyName: CncaCertResult }
+  const [isVerifyingCnca, setIsVerifyingCnca] = useState(false)
+
+  useEffect(() => {
     setTimeout(() => setIsLoaded(true), 100)
+    loadProvinces()
   }, [])
+
+  // Load provinces on mount
+  const loadProvinces = async () => {
+    try {
+      const api = getApi()
+      const response = await api.get('/tic-companies/provinces')
+      if (response.success && response.data) {
+        setProvinces(response.data)
+      }
+    } catch (error) {
+      console.error('Failed to load provinces:', error)
+    }
+  }
+
+  // Load cities when province changes
+  const loadCities = async (provinceName) => {
+    if (!provinceName) {
+      setCities([])
+      setCounties([])
+      return
+    }
+    try {
+      const api = getApi()
+      const response = await api.get('/tic-companies/cities', { province: provinceName })
+      if (response.success && response.data) {
+        setCities(response.data)
+        setCounties([])
+      }
+    } catch (error) {
+      console.error('Failed to load cities:', error)
+    }
+  }
+
+  // Load counties when city changes
+  const loadCounties = async (provinceName, cityName) => {
+    if (!provinceName || !cityName) {
+      setCounties([])
+      return
+    }
+    try {
+      const api = getApi()
+      const response = await api.get('/tic-companies/counties', { province: provinceName, city: cityName })
+      if (response.success && response.data) {
+        setCounties(response.data)
+      }
+    } catch (error) {
+      console.error('Failed to load counties:', error)
+    }
+  }
+
+  // Handle province change
+  const handleProvinceChange = (e) => {
+    const value = e.target.value
+    setSelectedProvince(value)
+    setSelectedCity('')
+    setSelectedCounty('')
+    setFormData({
+      ...formData,
+      province: value,
+      city: '',
+      county: ''
+    })
+    loadCities(value)
+  }
+
+  // Handle city change
+  const handleCityChange = (e) => {
+    const value = e.target.value
+    setSelectedCity(value)
+    setSelectedCounty('')
+    setFormData({
+      ...formData,
+      city: value,
+      county: ''
+    })
+    loadCounties(selectedProvince, value)
+  }
+
+  // Handle county change
+  const handleCountyChange = (e) => {
+    const value = e.target.value
+    setSelectedCounty(value)
+    setFormData({
+      ...formData,
+      county: value
+    })
+  }
+
+  // Handle page change
+  const handlePageChange = (newPage) => {
+    if (newPage < 1 || newPage > totalPages) return
+    setCurrentPage(newPage)
+    // Re-run search with new page
+    const doSearch = async () => {
+      setIsSearching(true)
+      try {
+        const api = getApi()
+        const params = buildApiParams(newPage)
+        const response = await api.getTicCompanies(params)
+        if (response.success && response.data) {
+          setSearchResults(response.data.list || [])
+        }
+      } catch (error) {
+        console.error('Search failed:', error)
+      } finally {
+        setIsSearching(false)
+      }
+    }
+    doSearch()
+  }
+
+  // Build API params helper
+  const buildApiParams = (page = currentPage) => {
+    const params = {
+      keyword: formData.keyword || undefined,
+      companyType: formData.companyType || undefined,
+      province: formData.province || undefined,
+      city: formData.city || undefined,
+      county: formData.county || undefined,
+      page: page,
+      pageSize: pageSize,
+    }
+    if (formData.socialSecurity === '50人以下') {
+      params.employeeCountMax = 50
+    } else if (formData.socialSecurity === '50-100人') {
+      params.employeeCountMin = 50
+      params.employeeCountMax = 100
+    } else if (formData.socialSecurity === '100-500人') {
+      params.employeeCountMin = 100
+      params.employeeCountMax = 500
+    } else if (formData.socialSecurity === '500-1000人') {
+      params.employeeCountMin = 500
+      params.employeeCountMax = 1000
+    } else if (formData.socialSecurity === '1000人以上') {
+      params.employeeCountMin = 1000
+    }
+    if (formData.registeredCapitalMin > 0) {
+      params.registeredCapitalMin = formData.registeredCapitalMin
+    }
+    if (formData.hasPhone) {
+      params.hasPhone = formData.hasPhone === '有' ? 'true' : 'false'
+    }
+    if (formData.hasWebsite) {
+      params.hasWebsite = formData.hasWebsite === '有' ? 'true' : 'false'
+    }
+    if (formData.businessScope) params.businessScope = formData.businessScope
+    Object.keys(params).forEach(key => params[key] === undefined && delete params[key])
+    return params
+  }
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target
@@ -131,47 +288,124 @@ export default function AIFinderPage() {
     })
   }
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     setIsSearching(true)
     setHasSearched(true)
 
-    setTimeout(() => {
-      const filtered = mockDeals.filter((deal) => {
-        if (formData.industry && deal.industry !== formData.industry) return false
-        if (formData.keyword && !deal.company.includes(formData.keyword) && !deal.title.includes(formData.keyword)) return false
-        return true
-      })
-      setSearchResults(filtered.slice(0, 6))
+    try {
+      const api = getApi()
+      const params = buildApiParams(1)
+      const response = await api.getTicCompanies(params)
+      if (response.success && response.data) {
+        setSearchResults(response.data.list || [])
+        setTotalCount(response.data.total || 0)
+        setTotalPages(response.data.totalPages || 0)
+        setCurrentPage(1)
+      } else {
+        setSearchResults([])
+        setTotalCount(0)
+        setTotalPages(0)
+      }
+    } catch (error) {
+      console.error('Search failed:', error)
+      setSearchResults([])
+    } finally {
       setIsSearching(false)
-    }, 1500)
+    }
   }
 
   const handleReset = () => {
     setFormData({
-      industry: '',
       keyword: '',
       companyType: '',
       socialSecurity: '',
-      registeredCapital: '',
+      registeredCapitalMin: 0,
+      registeredCapitalMax: 10000,
       establishmentDate: '',
-      hasCMA: false,
-      hasCNAS: false,
-      certCount: '',
-      labArea: '',
-      testingScope: '',
-      mainTestingArea: '',
-      customerIndustry: '',
-      hasFinancing: '',
-      financingDate: '',
-      investor: '',
-      financingAmount: '',
-      riskLevel: '',
-      changeRecords: '',
-      contactPerson: '',
-      contactMethod: '',
+      hasPhone: '',
+      hasWebsite: '',
+      businessScope: '',
+      province: '',
+      city: '',
+      county: '',
     })
+    setSelectedProvince('')
+    setSelectedCity('')
+    setSelectedCounty('')
+    setCities([])
+    setCounties([])
     setSearchResults([])
     setHasSearched(false)
+    setCurrentPage(1)
+    setTotalPages(0)
+    setTotalCount(0)
+  }
+
+  // View details - open qcc.com
+  const handleViewDetails = (companyName) => {
+    const url = `https://www.qcc.com/web/search?key=${encodeURIComponent(companyName)}`
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
+  // Join project handler
+  const handleJoinProject = (deal) => {
+    const dealForProject = {
+      company: deal.company_name,
+      industry: deal.industry_category,
+      region: [deal.province, deal.city, deal.county].filter(Boolean).join('-'),
+      amount: deal.registered_capital ? `¥${deal.registered_capital}` : '-',
+      matchScore: null,
+    }
+    setSelectedDeal(dealForProject)
+    setShowProjectSelector(true)
+  }
+
+  // Parse risk status
+  const getRiskTags = (deal) => {
+    const tags = []
+    if (deal.dishonest_status === '有') tags.push({ label: '失信被执行人', color: 'red' })
+    if (deal.被执行_status === '有') tags.push({ label: '被执行人', color: 'orange' })
+    if (deal.high_consumer_status === '有') tags.push({ label: '限制高消费', color: 'orange' })
+    if (deal.judicial_freeze_status === '有') tags.push({ label: '司法冻结', color: 'red' })
+    if (deal.business_exception_status === '有') tags.push({ label: '经营异常', color: 'yellow' })
+    return tags
+  }
+
+  // Truncate business scope
+  const truncateBusinessScope = (text, maxLength = 100) => {
+    if (!text) return ''
+    return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
+  }
+
+  // Format region display
+  const formatRegion = (province, city, county) => {
+    const parts = [province, city, county].filter(Boolean)
+    return parts.join('-') || '-'
+  }
+
+  // CNCA refresh handler
+  const handleRefreshCnca = async () => {
+    if (searchResults.length === 0) return
+    setIsVerifyingCnca(true)
+    try {
+      const companies = searchResults.map(deal => ({
+        name: deal.company_name || deal.company,
+        creditCode: deal.credit_code || ''
+      }))
+      const api = getApi()
+      const response = await api.verifyCncaCertification(companies)
+      if (response.success && response.data) {
+        const newResults = {}
+        response.data.forEach(cert => {
+          newResults[cert.name] = cert
+        })
+        setCncaResults(prev => ({ ...prev, ...newResults }))
+      }
+    } catch (error) {
+      console.error('CNCA verification failed:', error)
+    } finally {
+      setIsVerifyingCnca(false)
+    }
   }
 
   return (
@@ -181,13 +415,13 @@ export default function AIFinderPage() {
         <div className="text-center mb-12 animate-fade-in-up">
           <Badge variant="primary" className="mb-4 inline-flex items-center gap-2">
             <Sparkles size={14} />
-            <span>AI智能觅售</span>
+            <span>TIC企业查询</span>
           </Badge>
           <h1 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-4">
-            快速筛选<span className="gradient-text">优质出售项目</span>
+            快速筛选<span className="gradient-text">TIC检测认证企业</span>
           </h1>
           <p className="text-gray-600 max-w-2xl mx-auto text-lg">
-            基于人工智能技术，提高并购交易效率，降低信息不对称成本
+            基于人工智能技术，快速查找优质的TIC检测认证企业
           </p>
         </div>
 
@@ -203,29 +437,11 @@ export default function AIFinderPage() {
 
             <div className="space-y-5">
               <Input
-                label="所属行业"
-                name="industry"
-                value={formData.industry}
-                onChange={handleInputChange}
-                as="select"
-              >
-                <option value="">请选择行业</option>
-                <option value="科技">科技</option>
-                <option value="医疗健康">医疗健康</option>
-                <option value="金融服务">金融服务</option>
-                <option value="制造业">制造业</option>
-                <option value="零售消费">零售消费</option>
-                <option value="能源环保">能源环保</option>
-                <option value="教育培训">教育培训</option>
-                <option value="TIC检测认证">TIC检测认证</option>
-              </Input>
-
-              <Input
                 label="关键字搜索"
                 name="keyword"
                 value={formData.keyword}
                 onChange={handleInputChange}
-                placeholder="输入企业名称或关键词"
+                placeholder="输入企业名称"
                 icon={Search}
               />
 
@@ -255,14 +471,30 @@ export default function AIFinderPage() {
                 ))}
               </Input>
 
-              <Input
-                label="注册资本（万元）"
-                name="registeredCapital"
-                value={formData.registeredCapital}
-                onChange={handleInputChange}
-                placeholder="如：5000"
-                icon={Key}
-              />
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  注册资本（万元）
+                </label>
+                <div className="px-1">
+                  <input
+                    type="range"
+                    name="registeredCapital"
+                    min="0"
+                    max="10000"
+                    step="100"
+                    value={formData.registeredCapitalMin}
+                    onChange={(e) => setFormData({ ...formData, registeredCapitalMin: parseInt(e.target.value) })}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary"
+                  />
+                </div>
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>0万</span>
+                  <span className="font-medium text-primary">
+                    {formData.registeredCapitalMin === 0 ? '不限' : `≥${formData.registeredCapitalMin}万`}
+                  </span>
+                  <span>10000+万</span>
+                </div>
+              </div>
 
               <Input
                 label="成立日期"
@@ -272,184 +504,84 @@ export default function AIFinderPage() {
                 type="date"
               />
 
-              {/* TIC行业专属字段 - 折叠 */}
-              <div className="border-t border-gray-100 pt-5">
-                <button
-                  type="button"
-                  onClick={() => setShowTICFields(!showTICFields)}
-                  className="flex items-center justify-between w-full text-left"
-                >
-                  <div className="flex items-center gap-2">
-                    <Shield size={18} className="text-primary" />
-                    <span className="font-medium text-gray-900">TIC行业专属筛选</span>
-                  </div>
-                  <span className={`text-gray-400 transition-transform ${showTICFields ? 'rotate-180' : ''}`}>
-                    ▼
-                  </span>
-                </button>
-
-                {showTICFields && (
-                  <div className="mt-4 space-y-4 animate-fade-in">
-                    {/* 资质复选框 */}
-                    <div className="flex flex-wrap gap-4">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          name="hasCMA"
-                          checked={formData.hasCMA}
-                          onChange={handleInputChange}
-                          className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                        />
-                        <span className="text-sm text-gray-700">CMA资质认定</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          name="hasCNAS"
-                          checked={formData.hasCNAS}
-                          onChange={handleInputChange}
-                          className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                        />
-                        <span className="text-sm text-gray-700">CNAS认可</span>
-                      </label>
-                    </div>
-
-                    <Input
-                      label="认可证书数量（个）"
-                      name="certCount"
-                      value={formData.certCount}
-                      onChange={handleInputChange}
-                      placeholder="如：120"
-                      icon={Award}
-                    />
-
-                    <Input
-                      label="实验室面积（平方米）"
-                      name="labArea"
-                      value={formData.labArea}
-                      onChange={handleInputChange}
-                      placeholder="如：5000"
-                      icon={Building2}
-                    />
-
-                    <Input
-                      label="主营检测领域"
-                      name="mainTestingArea"
-                      value={formData.mainTestingArea}
-                      onChange={handleInputChange}
-                      as="select"
-                    >
-                      <option value="">请选择主营检测领域</option>
-                      {testingAreas.map((area) => (
-                        <option key={area} value={area}>{area}</option>
-                      ))}
-                    </Input>
-
-                    <Input
-                      label="主要客户行业分布"
-                      name="customerIndustry"
-                      value={formData.customerIndustry}
-                      onChange={handleInputChange}
-                      as="select"
-                    >
-                      <option value="">请选择客户行业</option>
-                      {customerIndustries.map((ind) => (
-                        <option key={ind} value={ind}>{ind}</option>
-                      ))}
-                    </Input>
-                  </div>
-                )}
-              </div>
-
               <Input
-                label="是否有过融资"
-                name="hasFinancing"
-                value={formData.hasFinancing}
+                label="联系电话"
+                name="hasPhone"
+                value={formData.hasPhone}
                 onChange={handleInputChange}
                 as="select"
               >
                 <option value="">请选择</option>
-                <option value="是">是</option>
-                <option value="否">否</option>
+                <option value="有">有</option>
+                <option value="无">无</option>
               </Input>
 
               <Input
-                label="融资时间"
-                name="financingDate"
-                value={formData.financingDate}
-                onChange={handleInputChange}
-                type="date"
-              />
-
-              <Input
-                label="投资方"
-                name="investor"
-                value={formData.investor}
-                onChange={handleInputChange}
-                placeholder="请输入投资方名称"
-              />
-
-              <Input
-                label="融资金额（万元）"
-                name="financingAmount"
-                value={formData.financingAmount}
-                onChange={handleInputChange}
-                placeholder="如：5000"
-              />
-
-              {/* 风险系数 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  风险系数
-                </label>
-                <div className="flex gap-2">
-                  {[
-                    { value: '1', label: '低', color: 'bg-green-500', hover: 'hover:bg-green-600', ring: 'ring-green-500' },
-                    { value: '2', label: '较低', color: 'bg-lime-500', hover: 'hover:bg-lime-600', ring: 'ring-lime-500' },
-                    { value: '3', label: '中等', color: 'bg-yellow-500', hover: 'hover:bg-yellow-600', ring: 'ring-yellow-500' },
-                    { value: '4', label: '较高', color: 'bg-orange-500', hover: 'hover:bg-orange-600', ring: 'ring-orange-500' },
-                    { value: '5', label: '高', color: 'bg-red-500', hover: 'hover:bg-red-600', ring: 'ring-red-500' },
-                  ].map((level) => (
-                    <button
-                      key={level.value}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, riskLevel: level.value })}
-                      className={`flex-1 py-3 rounded-xl text-white text-sm font-medium transition-all duration-300 ${formData.riskLevel === level.value ? `${level.color} ring-2 ${level.ring} shadow-lg scale-105` : `${level.color} ${level.hover} opacity-70 hover:opacity-100`}`}
-                    >
-                      {level.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <Input
-                label="工商变更记录"
-                name="changeRecords"
-                value={formData.changeRecords}
+                label="网址"
+                name="hasWebsite"
+                value={formData.hasWebsite}
                 onChange={handleInputChange}
                 as="select"
               >
-                <option value="">请选择变更记录</option>
-                {changeRecordOptions.map((opt) => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
+                <option value="">请选择</option>
+                <option value="有">有</option>
+                <option value="无">无</option>
               </Input>
 
               <Input
-                label="联系人"
-                name="contactPerson"
-                value={formData.contactPerson}
+                label="经营范围"
+                name="businessScope"
+                value={formData.businessScope}
                 onChange={handleInputChange}
-                placeholder="请输入联系人姓名"
+                placeholder="输入经营范围关键字"
+                icon={FileText}
               />
 
-              <Input
-                label="联系方式"
-                name="contactMethod"
-                value={formData.contactMethod}
-                onChange={handleInputChange}
-                placeholder="请输入手机号或邮箱"
-              />
+              {/* 地区 - 三级联动 */}
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-gray-700">
+                  地区
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <select
+                    name="province"
+                    value={selectedProvince}
+                    onChange={handleProvinceChange}
+                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                  >
+                    <option value="">省</option>
+                    {provinces.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    name="city"
+                    value={selectedCity}
+                    onChange={handleCityChange}
+                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                    disabled={!selectedProvince}
+                  >
+                    <option value="">市</option>
+                    {cities.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    name="county"
+                    value={selectedCounty}
+                    onChange={handleCountyChange}
+                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                    disabled={!selectedCity}
+                  >
+                    <option value="">区/县</option>
+                    {counties.map((co) => (
+                      <option key={co} value={co}>{co}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
               <div className="flex gap-3 pt-4">
                 <Button
@@ -492,99 +624,33 @@ export default function AIFinderPage() {
                     <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl flex items-center justify-center shadow-lg">
                       <TrendingUp size={20} className="text-white" />
                     </div>
-                    <span className="font-bold text-gray-900 text-lg">找到 {searchResults.length} 个匹配项目</span>
+                    <span className="font-bold text-gray-900 text-lg">找到 {totalCount} 个匹配企业</span>
                   </div>
                   <Badge variant="success" className="px-3 py-1">精选推荐</Badge>
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-6">
-                  {searchResults.map((deal, index) => (
-                    <Card
-                      key={deal.id}
-                      padding="none"
-                      hover
-                      className="cursor-pointer overflow-hidden group"
-                      style={{ animationDelay: `${index * 100}ms` }}
-                    >
-                      <div className="h-1 bg-gradient-to-r from-primary to-secondary" />
-                      <div className="p-6">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-14 h-14 bg-gradient-to-br from-primary to-secondary rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
-                              {deal.company.charAt(0)}
-                            </div>
-                            <div>
-                              <h3 className="font-bold text-gray-900 group-hover:text-primary transition-colors">{deal.company}</h3>
-                              <p className="text-sm text-gray-500">{deal.title}</p>
-                            </div>
-                          </div>
-                          <Badge variant={deal.matchScore >= 90 ? 'success' : 'primary'} className="text-sm font-bold">
-                            {deal.matchScore}分
-                          </Badge>
-                        </div>
-
-                        {/* TIC资质标签 */}
-                        {deal.industry === 'TIC检测认证' && (
-                          <div className="flex flex-wrap gap-2 mb-4">
-                            {deal.hasCMA && (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-600 text-xs rounded-full">
-                                <CheckCircle size={12} />
-                                CMA
-                              </span>
-                            )}
-                            {deal.hasCNAS && (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-600 text-xs rounded-full">
-                                <CheckCircle size={12} />
-                                CNAS
-                              </span>
-                            )}
-                            {deal.certCount && (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-600 text-xs rounded-full">
-                                <Award size={12} />
-                                {deal.certCount}个证书
-                              </span>
-                            )}
-                          </div>
-                        )}
-
-                        <div className="grid grid-cols-2 gap-3 mb-4">
-                          <div className="text-center p-3 bg-gray-50 rounded-xl group-hover:bg-gray-100 transition-colors">
-                            <p className="text-xs text-gray-500 mb-1">交易金额</p>
-                            <p className="font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">{deal.amount}</p>
-                          </div>
-                          <div className="text-center p-3 bg-gray-50 rounded-xl group-hover:bg-gray-100 transition-colors">
-                            <p className="text-xs text-gray-500 mb-1">行业</p>
-                            <p className="font-semibold text-gray-700 text-sm">{deal.industry}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-gray-400 flex items-center gap-1">
-                            <MapPin size={12} />
-                            {deal.region}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setSelectedDeal(deal)
-                                setShowProjectSelector(true)
-                              }}
-                              icon={FolderPlus}
-                            >
-                              加入项目
-                            </Button>
-                            <Button variant="ghost" size="sm" className="group-hover:text-primary">
-                              查看详情 <ArrowRight size={14} className="ml-1 group-hover:translate-x-1 transition-transform" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
+                  {searchResults.map((deal, index) => {
+                    const riskTags = getRiskTags(deal)
+                    return (<Card key={deal.id || index} padding="none" hover className="cursor-pointer overflow-hidden group" style={{ animationDelay: `${index * 100}ms` }}><div className="h-1 bg-gradient-to-r from-primary to-secondary" /><div className="p-6"><div className="flex items-start justify-between mb-4"><div className="flex items-center space-x-3"><div className="w-14 h-14 bg-gradient-to-br from-primary to-secondary rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">{deal.company_name ? deal.company_name.charAt(0) : '?'}</div><div><h3 className={`font-bold text-gray-900 group-hover:text-primary transition-colors ${cncaResults[deal.company_name]?.hasCertification ? 'cursor-pointer' : ''}`} onClick={() => { const cert = cncaResults[deal.company_name]; if (cert?.hasCertification && cert?.detailUrl) { window.open(cert.detailUrl, '_blank', 'noopener,noreferrer') } }}>{deal.company_name}</h3><p className="text-sm text-gray-500">{deal.business_status || '-'}</p></div></div></div>{riskTags.length > 0 && (<div className="flex flex-wrap gap-2 mb-4">{riskTags.map((tag, tagIndex) => (<span key={tagIndex} className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full ${tag.color === 'red' ? 'bg-red-50 text-red-600' : tag.color === 'orange' ? 'bg-orange-50 text-orange-600' : 'bg-yellow-50 text-yellow-600'}`}><Shield size={12} />{tag.label}</span>))}</div>)}{cncaResults[deal.company_name] !== undefined && (<div className="mb-4 p-3 bg-gray-50 rounded-lg border-l-4 border-primary"><div className="flex items-center justify-between"><div className="flex items-center gap-2"><Shield size={16} className={cncaResults[deal.company_name]?.hasCertification === true ? 'text-green-600' : cncaResults[deal.company_name]?.hasCertification === false ? 'text-red-500' : 'text-gray-400'} /><span className="text-sm font-medium">{cncaResults[deal.company_name]?.hasCertification ? '已认证' : '无认证'}</span>{cncaResults[deal.company_name]?.certNo && (<span className="text-xs text-gray-500 ml-2">{cncaResults[deal.company_name].certNo}</span>)}</div>{cncaResults[deal.company_name]?.detailUrl && (<a href={cncaResults[deal.company_name].detailUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline flex items-center gap-1" onClick={(e) => e.stopPropagation()}>查看详情 <ArrowRight size={12} /></a>)}</div></div>)}{<div className="grid grid-cols-2 gap-3 mb-4 text-sm"><div className="p-2 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-1">法定代表人</p><p className="font-medium text-gray-700">{deal.legal_representative || '-'}</p></div><div className="p-2 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-1">注册资本</p><p className="font-medium text-gray-700">{deal.registered_capital || '-'}</p></div><div className="p-2 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-1">成立日期</p><p className="font-medium text-gray-700">{deal.establishment_date || '-'}</p></div><div className="p-2 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-1">行业</p><p className="font-medium text-gray-700 text-xs">{deal.industry_category || '-'}</p></div><div className="p-2 bg-gray-50 rounded-lg col-span-2"><p className="text-xs text-gray-500 mb-1">地区</p><p className="font-medium text-gray-700">{formatRegion(deal.province, deal.city, deal.county)}</p></div><div className="p-2 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-1">参保人数</p><p className="font-medium text-gray-700">{deal.employee_count || '-'}</p></div><div className="p-2 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-1">统一社会信用代码</p><p className="font-medium text-gray-700 text-xs font-mono">{deal.credit_code || '-'}</p></div></div>}<div className="flex items-center justify-between"><span className="text-xs text-gray-400 flex items-center gap-1"><MapPin size={12} />{formatRegion(deal.province, deal.city, deal.county)}</span><div className="flex items-center gap-2"><Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleJoinProject(deal) }} icon={FolderPlus}>加入项目</Button><Button variant="ghost" size="sm" onClick={() => handleViewDetails(deal.company_name)}>查看详情 <ArrowRight size={14} className="ml-1 group-hover:translate-x-1 transition-transform" /></Button></div></div></div></Card>)
+                  })}
                 </div>
+
+                {/* Floating CNCA Refresh Button */}
+                {hasSearched && searchResults.length > 0 && (
+                  <button
+                    onClick={handleRefreshCnca}
+                    disabled={isVerifyingCnca || isSearching}
+                    className="fixed bottom-4 right-4 bg-primary text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isVerifyingCnca ? (
+                      <span className="animate-spin">⟳</span>
+                    ) : (
+                      <Shield size={16} />
+                    )}
+                    {isVerifyingCnca ? '验证中...' : '刷新认证状态'}
+                  </button>
+                )}
               </div>
             ) : hasSearched && searchResults.length === 0 ? (
               <Card padding="lg" className="text-center">
