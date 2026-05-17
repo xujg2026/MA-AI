@@ -138,8 +138,8 @@ importsRouter.post('/excel', async (req, res) => {
       return
     }
 
-    const fileHeaders = jsonData[0].map((h) => String(h || ''))
-    const rows = jsonData.slice(1).filter((row) => row.some((cell) => cell))
+    const fileHeaders = jsonData[0].map((h: any) => String(h || ''))
+    const rows = jsonData.slice(1).filter((row: any[]) => row.some((cell: any) => cell))
 
     // 自动映射列
     const columnMap: Record<string, string> = {}
@@ -157,7 +157,7 @@ importsRouter.post('/excel', async (req, res) => {
     })
 
     const headerIndexMap: Record<string, number> = {}
-    fileHeaders.forEach((h, i) => {
+    fileHeaders.forEach((h: string, i: number) => {
       headerIndexMap[h] = i
     })
 
@@ -202,8 +202,8 @@ importsRouter.post('/excel', async (req, res) => {
           source: 'excel_import',
           company_name: record.company,
           company_type: record.type === 'buy' ? '买方' : '卖方',
-          sell_motivation: record.description || null,
-          risk_level: null,
+          sell_motivation: record.description || undefined,
+          risk_level: undefined,
           change_records: JSON.stringify({
             excelImport: true,
             importDate: new Date().toISOString(),
@@ -321,8 +321,8 @@ importsRouter.post('/sync', async (req, res) => {
           source: 'excel_import',
           company_name: record.company || null,
           company_type: record.type === 'buy' ? '买方' : '卖方',
-          sell_motivation: record.description || null,
-          risk_level: null,
+          sell_motivation: record.description || undefined,
+          risk_level: undefined,
           change_records: JSON.stringify({
             excelImport: true,
             importDate: new Date().toISOString(),
