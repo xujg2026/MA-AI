@@ -1,176 +1,210 @@
-// 实时新闻数据 - 这些数据会动态更新
-let newsCounter = Date.now()
+// M&A News Service
+// 提供新闻数据获取，支持真实API和mock fallback
 
-// 生成唯一ID
-const generateId = () => {
-  newsCounter += 1
-  return newsCounter
-}
+import api from './api.js'
 
-// 模拟实时新闻数据 - 可对接真实API
-const baseNews = [
-  { id: 1, title: '华测检测拟收购某环境检测公司100%股权', hot: true, category: '并购', sentiment: 'positive' },
-  { id: 2, title: '2024年TIC行业市场规模突破5000亿元', hot: false, category: '行业', sentiment: 'positive' },
-  { id: 3, title: 'AI技术在检测认证领域应用白皮书发布', hot: true, category: '技术', sentiment: 'positive' },
-  { id: 4, title: '某头部机构完成第12起并购整合', hot: false, category: '并购', sentiment: 'positive' },
-  { id: 5, title: '跨境检测认证服务需求激增200%', hot: true, category: '市场', sentiment: 'positive' },
-  { id: 6, title: '首批温室气体核查机构名单公布', hot: false, category: '政策', sentiment: 'neutral' },
-  { id: 7, title: '食品检测行业标准化建设取得新进展', hot: false, category: '行业', sentiment: 'positive' },
-  { id: 8, title: '检测行业Q1财报：营收平均增长15%', hot: true, category: '财报', sentiment: 'positive' },
-  { id: 9, title: '新版CNAS认可规范将于5月实施', hot: false, category: '政策', sentiment: 'neutral' },
-  { id: 10, title: '某检测机构被撤销CMA资质', hot: true, category: '监管', sentiment: 'negative' },
-  { id: 11, title: '长三角检测一体化发展论坛成功举办', hot: false, category: '行业', sentiment: 'positive' },
-  { id: 12, title: '第三方医学检测市场规模预计达800亿', hot: true, category: '市场', sentiment: 'positive' },
-]
+// 是否使用真实数据
+const USE_REAL_NEWS = import.meta.env.VITE_USE_REAL_NEWS === 'true'
 
-// 市场数据
+// 静态市场数据（用于NewsPage的marketData展示）
 export const marketData = [
-  { label: 'TIC行业指数', value: '3865.32', change: '+1.24%', up: true, icon: '📈' },
-  { label: '今日并购', value: '12', change: '+3', up: true, icon: '🤝' },
-  { label: '待审项目', value: '48', change: '+5', up: true, icon: '📋' },
-  { label: '成交金额(亿)', value: '8.5', change: '+15%', up: true, icon: '💰' },
-  { label: '新增企业', value: '156', change: '+23', up: true, icon: '🏢' },
-  { label: '行业招聘', value: '892', change: '-12%', up: false, icon: '👥' },
+  { label: 'TIC行业新闻', value: '156', change: '+12今日', up: true },
+  { label: '并购动态', value: '43', change: '+5今日', up: true },
+  { label: '政策解读', value: '28', change: '+2今日', up: true },
+  { label: '投资事件', value: '87', change: '+8今日', up: true },
+  { label: '上市动态', value: '12', change: '-1今日', up: false },
+  { label: '财报速递', value: '34', change: '+3今日', up: true },
 ]
 
-// 生成带时间戳的新闻
-const generateTimestamp = () => {
-  const now = Date.now()
-  const offset = Math.floor(Math.random() * 30) * 60 * 1000 // 0-30分钟
-  return new Date(now - offset).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-}
+// 获取实时新闻 (滚动)
+export const getLiveNews = async () => {
+  if (!USE_REAL_NEWS) {
+    return getMockLiveNews()
+  }
 
-// 获取实时新闻列表
-export const getLiveNews = () => {
-  return baseNews.map(news => ({
-    ...news,
-    id: generateId(),
-    time: generateTimestamp(),
-    views: Math.floor(Math.random() * 2000) + 500,
-  }))
-}
-
-// 热门新闻
-export const getHotNews = () => {
-  return baseNews.filter(n => n.hot).map(news => ({
-    ...news,
-    id: generateId(),
-    time: generateTimestamp(),
-    views: Math.floor(Math.random() * 3000) + 1000,
-  }))
-}
-
-// 最新新闻 (带NEW标签)
-export const getLatestNews = () => {
-  return baseNews.slice(0, 5).map((news, index) => ({
-    ...news,
-    id: generateId(),
-    time: index === 0 ? '刚刚' : `${(index + 1) * 5}分钟前`,
-    views: Math.floor(Math.random() * 1000) + 100,
-    isNew: index < 2,
-  }))
-}
-
-// 完整新闻列表 (用于资讯页面)
-export const getAllNews = () => {
-  const categories = ['行业研究', '技术前沿', '案例分析', '合规指南', '市场分析']
-  const now = Date.now()
-
-  return Array.from({ length: 20 }, (_, i) => {
-    const category = categories[i % categories.length]
-    const isHot = i % 4 === 0
-    const daysAgo = Math.floor(i / 2)
-
-    return {
-      id: now + i,
-      title: getNewsTitle(category, i),
-      category,
-      date: getDate(daysAgo),
-      summary: getSummary(category, i),
-      hot: isHot,
-      views: Math.floor(Math.random() * 3000) + 500,
-      isNew: daysAgo === 0,
+  try {
+    const response = await api.get('/news/live')
+    if (response.data && response.data.length > 0) {
+      return response.data.map(a => ({
+        id: a.id,
+        title: a.title,
+        category: a.category || '快讯',
+        hot: a.hot || false,
+        sentiment: a.sentiment || 'neutral',
+        time: a.time || '',
+        views: a.views || 0,
+      }))
     }
-  })
-}
-
-// 根据分类获取新闻标题
-const getNewsTitle = (category, index) => {
-  const titles = {
-    '行业研究': [
-      '2024年中国TIC检测行业并购趋势分析',
-      '第三方检测机构市场竞争格局研究',
-      '检测认证行业发展周期与投资机会',
-      'TIC行业上市公司业绩对比分析',
-      '检测行业细分市场增长潜力评估',
-    ],
-    '技术前沿': [
-      'AI技术在尽职调查中的应用白皮书',
-      '区块链在检测认证领域的应用探索',
-      '大数据分析提升企业估值准确性',
-      '机器学习在风险评估中的实践',
-      '智能化检测技术的最新进展',
-    ],
-    '案例分析': [
-      '某上市公司收购检测公司案例分析',
-      '跨国检测机构并购整合全流程复盘',
-      '国有检测机构混改成功案例研究',
-      '民营企业IPO转型案例深度剖析',
-      '检测行业并购中的估值调整机制',
-    ],
-    '合规指南': [
-      '跨境并购中的合规风险与应对策略',
-      '检测行业反垄断申报要点解析',
-      '外资检测机构在华合规经营指南',
-      '上市公司收购检测公司审核关注点',
-      '检测行业数据安全合规要求',
-    ],
-    '市场分析': [
-      '2024年Q1并购市场回顾与展望',
-      '检测行业并购交易结构创新趋势',
-      'PE/VC在检测行业投资策略分析',
-      '检测行业估值倍数对比研究',
-      '2024年检测行业并购预测报告',
-    ],
+  } catch (error) {
+    console.warn('[NewsService] Real news fetch failed, using mock:', error)
   }
 
-  const categoryTitles = titles[category] || titles['行业研究']
-  return categoryTitles[index % categoryTitles.length]
+  return getMockLiveNews()
 }
 
-const getSummary = (category, index) => {
-  const summaries = {
-    '行业研究': '本报告深入分析了中国TIC检测行业的并购趋势，探讨了龙头企业通过并购整合提升市场份额的策略路径...',
-    '技术前沿': '人工智能技术正在革新传统的尽职调查流程，通过自然语言处理和机器学习算法大幅提升效率和准确性...',
-    '案例分析': '本次收购标的公司为国内领先的第三方检测机构，交易金额达8亿元，是该细分领域最大规模的并购交易...',
-    '合规指南': '跨境并购涉及多个司法管辖区的合规要求，企业需要提前做好风险评估，并制定相应的应对策略...',
-    '市场分析': '本季度并购市场活跃度较去年同期有所提升，科技和医疗健康领域仍是热点，TIC行业交易数量显著增加...',
+// 获取热门新闻
+export const getHotNews = async () => {
+  if (!USE_REAL_NEWS) {
+    return getMockHotNews()
   }
-  return summaries[category] || summaries['行业研究']
-}
 
-const getDate = (daysAgo) => {
-  const date = new Date()
-  date.setDate(date.getDate() - daysAgo)
-  return date.toISOString().split('T')[0]
-}
-
-// 实时更新模拟 - 每隔一段时间返回新数据
-let updateInterval = null
-
-export const subscribeToNews = (callback, interval = 30000) => {
-  // 立即调用一次
-  callback(getLiveNews())
-
-  // 定期更新
-  updateInterval = setInterval(() => {
-    callback(getLiveNews())
-  }, interval)
-
-  // 返回取消订阅函数
-  return () => {
-    if (updateInterval) {
-      clearInterval(updateInterval)
+  try {
+    const response = await api.get('/news/hot')
+    if (response.data && response.data.length > 0) {
+      return response.data.map(a => ({
+        id: a.id,
+        title: a.title,
+        category: a.category || '热门',
+        hot: true,
+        sentiment: a.sentiment || 'neutral',
+        time: a.time || '',
+        views: a.views || 0,
+      }))
     }
+  } catch (error) {
+    console.warn('[NewsService] Real hot news failed, using mock:', error)
   }
+
+  return getMockHotNews()
+}
+
+// 获取所有新闻
+export const getAllNews = async (filters = {}) => {
+  if (!USE_REAL_NEWS) {
+    return getMockAllNews(filters)
+  }
+
+  try {
+    const response = await api.get('/news/all', { params: filters })
+    if (response.data && response.data.length > 0) {
+      // Transform real API data to match expected format
+      return response.data.map(a => ({
+        id: a.id,
+        title: a.title,
+        category: a.category || '其他',
+        date: a.date ? new Date(a.date).toLocaleDateString('zh-CN') : '',
+        summary: a.body ? a.body.substring(0, 100) + '...' : '',
+        hot: a.hot || false,
+        views: a.views || 0,
+        is_tic: a.is_tic || false,
+        is_ma: a.is_ma || false,
+        sentiment: a.sentiment || 'neutral',
+      }))
+    }
+  } catch (error) {
+    console.warn('[NewsService] Real news failed, using mock:', error)
+  }
+
+  return getMockAllNews(filters)
+}
+
+// 获取市场数据
+export const getMarketStats = async () => {
+  if (!USE_REAL_NEWS) {
+    return getMockMarketData()
+  }
+
+  try {
+    const response = await api.get('/news/stats')
+    if (response.data && response.data.length > 0) {
+      return response.data
+    }
+  } catch (error) {
+    console.warn('[NewsService] Real market stats failed, using mock:', error)
+  }
+
+  return getMockMarketData()
+}
+
+// 搜索新闻
+export const searchNews = async (keyword) => {
+  if (!USE_REAL_NEWS) {
+    return getMockAllNews({ keyword })
+  }
+
+  try {
+    const response = await api.get('/news/search', { params: { keyword } })
+    return response.data || []
+  } catch (error) {
+    console.warn('[NewsService] Real search failed, using mock:', error)
+  }
+
+  return []
+}
+
+// 手动触发采集
+export const triggerCollection = async () => {
+  try {
+    await api.post('/news/collect')
+    return true
+  } catch (error) {
+    console.error('[NewsService] Trigger collection failed:', error)
+    return false
+  }
+}
+
+// 手动触发AI分析
+export const triggerAnalysis = async (count = 100) => {
+  try {
+    const response = await api.post('/news/analyze', null, { params: { count } })
+    return response.analyzed_count || 0
+  } catch (error) {
+    console.error('[NewsService] Trigger analysis failed:', error)
+    return 0
+  }
+}
+
+// ============ Mock 数据 (Fallback) ============
+
+function getMockLiveNews() {
+  return [
+    { id: 1, title: '华测检测拟收购某环境检测公司100%股权', hot: true, category: '并购', sentiment: 'positive', time: '刚刚', views: 1234 },
+    { id: 2, title: '2024年TIC行业市场规模突破5000亿元', hot: false, category: '行业', sentiment: 'positive', time: '5分钟前', views: 890 },
+    { id: 3, title: 'AI技术在检测认证领域应用白皮书发布', hot: true, category: '技术', sentiment: 'positive', time: '10分钟前', views: 567 },
+    { id: 4, title: '某头部机构完成第12起并购整合', hot: false, category: '并购', sentiment: 'positive', time: '15分钟前', views: 432 },
+    { id: 5, title: '跨境检测认证服务需求激增200%', hot: true, category: '市场', sentiment: 'positive', time: '20分钟前', views: 321 },
+  ]
+}
+
+function getMockHotNews() {
+  return [
+    { id: 1, title: '华测检测拟收购某环境检测公司100%股权', hot: true, category: '并购', sentiment: 'positive', time: '刚刚', views: 1234 },
+    { id: 3, title: 'AI技术在检测认证领域应用白皮书发布', hot: true, category: '技术', sentiment: 'positive', time: '10分钟前', views: 567 },
+    { id: 5, title: '跨境检测认证服务需求激增200%', hot: true, category: '市场', sentiment: 'positive', time: '20分钟前', views: 321 },
+    { id: 8, title: '检测行业Q1财报：营收平均增长15%', hot: true, category: '财报', sentiment: 'positive', time: '30分钟前', views: 234 },
+    { id: 10, title: '某检测机构被撤销CMA资质', hot: true, category: '监管', sentiment: 'negative', time: '45分钟前', views: 189 },
+  ]
+}
+
+function getMockAllNews(filters = {}) {
+  const baseNews = [
+    { id: 1, title: '华测检测拟收购某环境检测公司100%股权', category: '并购', date: '2024-03-15', summary: '华测检测发布公告称拟收购某环境检测公司100%股权...', hot: true, views: 1234, is_tic: true, is_ma: true, sentiment: 'positive' },
+    { id: 2, title: '2024年TIC行业市场规模突破5000亿元', category: '行业研究', date: '2024-03-14', summary: '根据最新报告，2024年中国TIC行业市场规模...', hot: false, views: 890, is_tic: true, is_ma: false, sentiment: 'positive' },
+    { id: 3, title: 'AI技术在检测认证领域应用白皮书发布', category: '技术前沿', date: '2024-03-13', summary: '中国信通院发布《AI在检测认证领域应用白皮书》...', hot: true, views: 567, is_tic: true, is_ma: false, sentiment: 'positive' },
+    { id: 4, title: '某头部机构完成第12起并购整合', category: '案例分析', date: '2024-03-12', summary: '某头部检测机构宣布完成第12起并购整合...', hot: false, views: 432, is_tic: true, is_ma: true, sentiment: 'positive' },
+    { id: 5, title: '跨境检测认证服务需求激增200%', category: '市场分析', date: '2024-03-11', summary: '受全球贸易复苏影响，跨境检测认证服务需求...', hot: true, views: 321, is_tic: true, is_ma: false, sentiment: 'positive' },
+    { id: 6, title: '首批温室气体核查机构名单公布', category: '合规指南', date: '2024-03-10', summary: '生态环境部公布首批温室气体核查机构名单...', hot: false, views: 234, is_tic: true, is_ma: false, sentiment: 'neutral' },
+    { id: 7, title: '食品检测行业标准化建设取得新进展', category: '行业研究', date: '2024-03-09', summary: '全国食品检测标准化技术委员会年会召开...', hot: false, views: 189, is_tic: true, is_ma: false, sentiment: 'positive' },
+    { id: 8, title: '检测行业Q1财报：营收平均增长15%', category: '市场分析', date: '2024-03-08', summary: '多家检测行业上市公司发布Q1财报...', hot: true, views: 178, is_tic: true, is_ma: false, sentiment: 'positive' },
+    { id: 9, title: '新版CNAS认可规范将于5月实施', category: '合规指南', date: '2024-03-07', summary: 'CNAS发布新版认可规范，将于5月1日起实施...', hot: false, views: 156, is_tic: true, is_ma: false, sentiment: 'neutral' },
+    { id: 10, title: '某检测机构被撤销CMA资质', category: '合规指南', date: '2024-03-06', summary: '某检测机构因违规被撤销CMA资质...', hot: true, views: 145, is_tic: true, is_ma: false, sentiment: 'negative' },
+  ]
+
+  let filtered = baseNews
+  if (filters.category) {
+    filtered = filtered.filter(n => n.category === filters.category)
+  }
+
+  return filtered
+}
+
+function getMockMarketData() {
+  return [
+    { label: 'TIC行业指数', value: '3865.32', change: '+1.24%', up: true, icon: '📈' },
+    { label: '今日并购', value: '12', change: '+3', up: true, icon: '🤝' },
+    { label: '待审项目', value: '48', change: '+5', up: true, icon: '📋' },
+    { label: '成交金额(亿)', value: '8.5', change: '+15%', up: true, icon: '💰' },
+    { label: '新增企业', value: '156', change: '+23', up: true, icon: '🏢' },
+    { label: '行业招聘', value: '892', change: '-12%', up: false, icon: '👥' },
+  ]
 }

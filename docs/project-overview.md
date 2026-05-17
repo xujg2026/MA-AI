@@ -71,7 +71,8 @@ Browser
 | `/deals` | `src/pages/DealsPage.jsx` | `mockData + excelData` | 案例库，可叠加导入数据 |
 | `/dashboard` | `src/pages/DashboardPage.jsx` | mock | 个人工作台 |
 | `/data-management` | `src/pages/DataManagementPage.jsx` | `xlsx + zustand` | 本地导入/录入管理 |
-| `/news` | `src/pages/NewsPage.jsx` | `newsService` mock | 资讯页，当前为本地模拟 |
+| `/news` | `src/pages/NewsPage.jsx` | `/api/news/*` + `newsService` | 资讯页，已接真实后端 |
+| `/ai-due-diligence` | `src/pages/AIDueDiligencePage.jsx` | `QCC + mock checklist` | 尽调分析/推荐书入口 |
 | `/ai-due-diligence` | `src/pages/AIDueDiligencePage.jsx` | `QCC + mock checklist` | 尽调分析/推荐书入口 |
 | `/projects` | `src/pages/ProjectListPage.jsx` | `/api/projects` | 项目列表页 |
 | `/projects/:id` | `src/pages/ProjectDetailPage.jsx` | `/api/projects/:id` | 项目详情页 |
@@ -91,6 +92,7 @@ Browser
 | `/api/qcc/*` | `server/src/routes/qcc.ts` | `server/src/services/qccApi.ts` | 企查查企业情报 |
 | `/api/cnca-certification/*` | `server/src/routes/cncaCertification.ts` | Puppeteer MCP | CNCA 认证状态查询 |
 | `/api/tic-companies` | `server/src/routes/ticCompanies.ts` | 本地 SQLite | TIC 企业查询 |
+| `/api/news/*` | `server/src/routes/news.ts` | 本地 SQLite + 采集器 | 资讯新闻采集与获取 |
 | `/api/projects/*` | `server/src/routes/projects.ts` | 本地 SQLite | 项目管理 CRUD |
 | `/api/imports/*` | `server/src/routes/imports.ts` | 本地 SQLite | Excel 导入 |
 
@@ -124,13 +126,14 @@ Browser
   - QCC 企业情报
   - 尽调分析中的企业风险解析
   - 推荐书生成的数据拉取部分
+  - 资讯新闻（真实后端 + mock fallback）
 - 本地能力但不走后端：
   - Excel 导入
   - 导入数据持久化
   - 案例库筛选
 - 纯 mock/演示态：
-  - 首页、看板、资讯页大部分内容
-  - AI 觅售页
+  - 首页、看板大部分内容
+  - AI 觅售页部分展示数据
   - 部分交易流程页面的展示数据
 
 ## 9. 目前已知的不一致点

@@ -1,6 +1,6 @@
 # 开发总结
 
-**最后更新:** 2026-05-16
+**最后更新:** 2026-05-17
 
 ---
 
@@ -312,3 +312,93 @@ AIFinderPage 重构为 TIC 企业查询：
 | `updated_at` | `updated_at` | 更新时间 |
 | `change_records` | `change_records` | JSON 包含财务数据、动机等 |
 | `sell_motivation` | `sell_motivation` | 出售动机 (JSON数组) |
+
+---
+
+## 十三、新闻资讯模块 (2026-05-17)
+
+### 功能概述
+新闻资讯模块实现 TIC 行业相关新闻的采集、存储、AI 分析和展示。
+
+### 新增文件
+| 文件 | 说明 |
+|------|------|
+| `server/src/routes/news.ts` | 新闻 API 路由 |
+| `server/src/utils/newsDb.ts` | SQLite 新闻数据库工具 |
+| `server/src/collectors/rssCollector.ts` | RSS 采集器 |
+| `server/src/collectors/newsAnalyzer.ts` | AI 新闻分析器（情感分析 + TIC/M&A 分类） |
+| `server/src/collectors/scheduler.ts` | 采集调度器 |
+| `server/src/collectors/initFeeds.ts` | 初始化默认新闻源 |
+| `src/services/newsService.js` | 前端新闻服务（真实 API + mock fallback） |
+| `server/data/news.db` | 新闻 SQLite 数据库 |
+
+### 数据库表结构
+**feeds 表**：新闻源配置（名称、URL、轮询间隔、启用状态等）
+**articles 表**：文章内容（标题、正文、发布时间、分类、热度、情感分析等）
+
+### 前端服务
+`src/services/newsService.js` 提供：
+- `getLiveNews()` — 实时快讯
+- `getHotNews()` — 热门文章
+- `getAllNews(filters)` — 所有/筛选文章
+- `getMarketStats()` — 市场数据
+- `searchNews(keyword)` — 搜索新闻
+- `triggerCollection()` — 手动触发采集
+- `triggerAnalysis(count)` — 手动触发 AI 分析
+
+环境变量 `VITE_USE_REAL_NEWS=true` 启用真实后端。
+
+### API 接口
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/news/health` | 健康检查 |
+| GET | `/api/news/live` | 实时快讯 |
+| GET | `/api/news/hot` | 热门文章 |
+| GET | `/api/news/all` | 所有/筛选文章 |
+| GET | `/api/news/stats` | 市场数据 |
+| GET/POST/PUT/DELETE | `/api/news/feeds` | 新闻源管理 |
+| POST | `/api/news/collect` | 手动触发采集 |
+| POST | `/api/news/analyze` | 手动触发 AI 分析 |
+
+### AI 分析功能
+- **情感分析**：自动判断新闻情感（正面/负面/中性）
+- **TIC 分类**：自动识别是否为 TIC 行业相关文章
+- **M&A 分类**：自动识别是否为并购相关文章
+- **热度计算**：基于时间和浏览量的热度算法
+
+---
+
+## 十四、自定义尽调清单 (2026-05-17)
+
+### 功能概述
+在项目管理中，支持项目级自定义尽调清单，支持文件上传和状态管理。
+
+### 新增文件
+| 文件 | 说明 |
+|------|------|
+| `server/src/routes/ddCustomItems.ts` | 自定义清单 API 路由 |
+| `server/data/dd_custom_items.db` | 自定义清单 SQLite 数据库 |
+| `server/data/uploads/` | 上传文件存储目录 |
+
+### API 接口
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/dd-custom-items/:id/custom-items` | 获取项目的自定义清单项 |
+| POST | `/api/dd-custom-items/:id/custom-items` | 创建自定义清单项 |
+| PUT | `/api/dd-custom-items/:id/custom-items/:itemId` | 更新清单项 |
+| DELETE | `/api/dd-custom-items/:id/custom-items/:itemId` | 删除清单项 |
+| POST | `/api/dd-custom-items/:id/custom-items/:itemId/upload` | 上传文件 |
+| GET | `/api/dd-custom-items/:id/custom-items/:itemId/file` | 下载文件 |
+
+### 数据库字段
+| 字段 | 说明 |
+|------|------|
+| id | 主键 UUID |
+| project_id | 外键关联 projects |
+| section | 清单分区（legal、财务、业务等） |
+| item_name | 清单项名称 |
+| description | 清单项描述 |
+| status | 状态（pending/completed） |
+| file_path | 上传文件路径 |
+| file_name | 上传文件原名 |
+| file_size | 上传文件大小 |

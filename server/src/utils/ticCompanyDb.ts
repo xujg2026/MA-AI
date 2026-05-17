@@ -336,6 +336,12 @@ export function queryTicCompanies(
       params.push(filters.employeeCountMax)
     }
 
+    // registeredCapitalMin 注册资本下限（万元）
+    if (filters.registeredCapitalMin !== undefined && filters.registeredCapitalMin > 0) {
+      conditions.push("CAST(REPLACE(registered_capital, '万', '') AS INTEGER) >= ?")
+      params.push(filters.registeredCapitalMin)
+    }
+
     // hasPhone 联系电话筛选
     if (filters.hasPhone === 'true' || filters.hasPhone === '1') {
       conditions.push("phone IS NOT NULL AND phone != ''")

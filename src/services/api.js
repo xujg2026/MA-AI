@@ -35,11 +35,16 @@ class ApiService {
 
     const options = {
       method,
-      headers: this.getHeaders(),
     }
 
-    if (body && method !== 'GET') {
-      options.body = JSON.stringify(body)
+    // 如果是 FormData，不设置 Content-Type，让浏览器自动处理
+    if (body instanceof FormData) {
+      options.body = body
+    } else {
+      options.headers = this.getHeaders()
+      if (body && method !== 'GET') {
+        options.body = JSON.stringify(body)
+      }
     }
 
     try {
@@ -168,8 +173,66 @@ class ApiService {
    * 获取企业综合情报数据
    * POST /api/qcc/company-intelligence
    */
-  getQccCompanyIntelligence(companyName) {
-    return this.post('/qcc/company-intelligence', { companyName })
+  getQccCompanyIntelligence(companyName, forceRefresh = false) {
+    return this.post('/qcc/company-intelligence', { companyName, forceRefresh })
+  }
+
+  /**
+   * 获取企查查缓存数据
+   * GET /api/qcc/cached-data/:companyName
+   */
+  getQccCachedData(companyName) {
+    return this.get(`/qcc/cached-data/${encodeURIComponent(companyName)}`)
+  }
+
+  // ========== 自定义清单项 ==========
+
+  /**
+   * 获取项目的自定义清单项
+   * GET /api/projects/:id/custom-items
+   */
+  getCustomItems(projectId, section) {
+    return this.get(`/projects/${projectId}/custom-items`, section ? { section } : null)
+  }
+
+  /**
+   * 创建自定义清单项
+   * POST /api/projects/:id/custom-items
+   */
+  saveCustomItem(projectId, data) {
+    return this.post(`/projects/${projectId}/custom-items`, data)
+  }
+
+  /**
+   * 更新自定义清单项
+   * PUT /api/projects/:id/custom-items/:itemId
+   */
+  updateCustomItem(projectId, itemId, data) {
+    return this.request('PUT', `/projects/${projectId}/custom-items/${itemId}`, data)
+  }
+
+  /**
+   * 删除自定义清单项
+   * DELETE /api/projects/:id/custom-items/:itemId
+   */
+  deleteCustomItem(projectId, itemId) {
+    return this.request('DELETE', `/projects/${projectId}/custom-items/${itemId}`)
+  }
+
+  /**
+   * 上传自定义清单项文件
+   * POST /api/projects/:id/custom-items/:itemId/upload
+   */
+  uploadCustomItemFile(projectId, itemId, formData) {
+    return this.post(`/projects/${projectId}/custom-items/${itemId}/upload`, formData)
+  }
+
+  /**
+   * 下载自定义清单项文件
+   * GET /api/projects/:id/custom-items/:itemId/file
+   */
+  getCustomItemFileUrl(projectId, itemId) {
+    return `${this.baseUrl}/projects/${projectId}/custom-items/${itemId}/file`
   }
 
   // ========== 协议管理 ==========

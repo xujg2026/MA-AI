@@ -74,6 +74,21 @@ export interface BuyerScreeningCache {
   expires_at: string | null  // 过期时间，null表示永不过期
 }
 
+// 自定义清单项接口
+export interface DdCustomItem {
+  id: string
+  project_id: string
+  section: string
+  item_name: string
+  description: string | null
+  file_path: string | null
+  file_name: string | null
+  file_size: number | null
+  status: string
+  created_at: string
+  updated_at: string
+}
+
 // 创建项目参数
 export interface CreateProjectParams {
   id: string
@@ -238,6 +253,32 @@ export function initProjectDb(): void {
   // 创建缓存查询索引（按目标公司名+行业）
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_buyer_cache_target ON buyer_screening_cache(target_name, target_industry)
+  `)
+
+  // 创建自定义清单项表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dd_custom_items (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      section TEXT NOT NULL,
+      item_name TEXT NOT NULL,
+      description TEXT,
+      file_path TEXT,
+      file_name TEXT,
+      file_size INTEGER,
+      status TEXT DEFAULT 'pending',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (project_id) REFERENCES projects(id)
+    )
+  `)
+
+  // 创建自定义清单项查询索引
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_custom_items_project ON dd_custom_items(project_id)
+  `)
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_custom_items_section ON dd_custom_items(section)
   `)
 
   console.log('[ProjectDb] Database initialized successfully')
@@ -841,6 +882,138 @@ export function getBuyerScreeningCacheStats(): { total: number; expired: number 
   } catch (error) {
     console.error('[ProjectDb] getBuyerScreeningCacheStats error:', error)
     return { total: 0, expired: 0 }
+  }
+}
+
+// ========== 自定义清单项 ==========
+
+interface CreateCustomItemParams {
+  projectId: string
+  section: string
+  itemName: string
+  description?: string
+  filePath?: string
+  fileName?: string
+  fileSize?: number
+}
+
+interface UpdateCustomItemParams {
+  description?: string
+  filePath?: string
+  fileName?: string
+  fileSize?: number
+  status?: string
+}
+
+function generateCustomItemId(): string {
+  return `ci_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+}
+
+export function createCustomItem(params: CreateCustomItemParams): DdCustomItem | null {
+  const db = getDb()
+
+  try {
+    const id = generateCustomItemId()
+    db.prepare(`
+      INSERT INTO dd_custom_items (id, project_id, section, item_name, description, file_path, file_name, file_size)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      params.projectId,
+      params.section,
+      params.itemName,
+      params.description || null,
+      params.filePath || null,
+      params.fileName || null,
+      params.fileSize || null
+    )
+    return getCustomItem(id)
+  } catch (error) {
+    console.error('[ProjectDb] createCustomItem error:', error)
+    return null
+  }
+}
+
+export function getCustomItem(id: string): DdCustomItem | null {
+  const db = getDb()
+
+  try {
+    const row = db.prepare('SELECT * FROM dd_custom_items WHERE id = ?').get(id) as DdCustomItem | undefined
+    return row || null
+  } catch (error) {
+    console.error('[ProjectDb] getCustomItem error:', error)
+    return null
+  }
+}
+
+export function getCustomItems(projectId: string, section?: string): DdCustomItem[] {
+  const db = getDb()
+
+  try {
+    if (section) {
+      return db.prepare(
+        'SELECT * FROM dd_custom_items WHERE project_id = ? AND section = ? ORDER BY created_at DESC'
+      ).all(projectId, section) as DdCustomItem[]
+    }
+    return db.prepare(
+      'SELECT * FROM dd_custom_items WHERE project_id = ? ORDER BY created_at DESC'
+    ).all(projectId) as DdCustomItem[]
+  } catch (error) {
+    console.error('[ProjectDb] getCustomItems error:', error)
+    return []
+  }
+}
+
+export function updateCustomItem(id: string, data: UpdateCustomItemParams): DdCustomItem | null {
+  const db = getDb()
+
+  try {
+    const fields: string[] = ['updated_at = CURRENT_TIMESTAMP']
+    const params: any[] = []
+
+    if (data.description !== undefined) {
+      fields.push('description = ?')
+      params.push(data.description)
+    }
+    if (data.filePath !== undefined) {
+      fields.push('file_path = ?')
+      params.push(data.filePath)
+    }
+    if (data.fileName !== undefined) {
+      fields.push('file_name = ?')
+      params.push(data.fileName)
+    }
+    if (data.fileSize !== undefined) {
+      fields.push('file_size = ?')
+      params.push(data.fileSize)
+    }
+    if (data.status !== undefined) {
+      fields.push('status = ?')
+      params.push(data.status)
+    }
+
+    if (fields.length === 1) {
+      return getCustomItem(id)
+    }
+
+    params.push(id)
+    db.prepare(`UPDATE dd_custom_items SET ${fields.join(', ')} WHERE id = ?`).run(...params)
+    return getCustomItem(id)
+  } catch (error) {
+    console.error('[ProjectDb] updateCustomItem error:', error)
+    return null
+  }
+}
+
+export function deleteCustomItem(id: string): boolean {
+  const db = getDb()
+
+  try {
+    const result = db.prepare('DELETE FROM dd_custom_items WHERE id = ?').run(id)
+    return result.changes > 0
+  } catch (error) {
+    console.error('[ProjectDb] deleteCustomItem error:', error)
+    return false
   }
 }
 
