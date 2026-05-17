@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  # Frontend - Nginx serving React build
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: ma-ai-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - ma-ai-network
+
+  # Backend - Express API Server
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: ma-ai-backend
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - EM_API_KEY=${EM_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - TUSHARE_TOKEN=${TUSHARE_TOKEN:-}
+      - QCC_API_KEY=${QCC_API_KEY:-}
+      - QCC_API_SECRET=${QCC_API_SECRET:-}
+      - NEWS_COLLECTION_INTERVAL=${NEWS_COLLECTION_INTERVAL:-5}
+      - NEWS_ANALYSIS_INTERVAL=${NEWS_ANALYSIS_INTERVAL:-60}
+    ports:
+      - "3001:3001"
+    restart: unless-stopped
+    networks:
+      - ma-ai-network
+
+networks:
+  ma-ai-network:
+    driver: bridge
