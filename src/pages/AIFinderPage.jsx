@@ -396,8 +396,11 @@ export default function AIFinderPage() {
       const response = await api.verifyCncaCertification(companies)
       if (response.success && response.data) {
         const newResults = {}
-        response.data.forEach(cert => {
-          newResults[cert.name] = cert
+        response.data.forEach((cert, index) => {
+          const company = companies[index]
+          if (company) {
+            newResults[company.name] = cert
+          }
         })
         setCncaResults(prev => ({ ...prev, ...newResults }))
       }

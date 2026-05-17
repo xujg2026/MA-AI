@@ -48,7 +48,17 @@
       "Bash(pip install *)",
       "Bash(python *)",
       "Bash(curl.exe *)",
-      "Bash(D:/ProgramFiles/Anaconda/python.exe *)"
+      "Bash(D:/ProgramFiles/Anaconda/python.exe *)",
+      "Bash(git checkout *)",
+      "Bash(git reset *)",
+      "Bash(xxd)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('success:', d['success']\\); print\\('error:', d.get\\('error',''\\)[:200]\\); print\\('meta:', d.get\\('meta'\\)\\)\")",
+      "Bash(tasklist /FI \"PID eq 19964\")",
+      "Bash(wmic process *)",
+      "Bash(findstr LISTEN)",
+      "Bash(npx eslint *)",
+      "Bash(git restore *)",
+      "Bash(git rm *)"
     ]
   }
 }

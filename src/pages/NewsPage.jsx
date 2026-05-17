@@ -14,13 +14,31 @@ export default function NewsPage() {
   const [allNews, setAllNews] = useState([])
   const [lastUpdate, setLastUpdate] = useState(new Date())
 
+  // 加载状态
+  const [loading, setLoading] = useState(true)
+
   // 加载数据
   useEffect(() => {
-    setLiveNews(getLiveNews())
-    setHotNews(getHotNews())
-    setAllNews(getAllNews())
-    setLastUpdate(new Date())
-    setIsLoaded(true)
+    async function loadNews() {
+      try {
+        setLoading(true)
+        const [live, hot, all] = await Promise.all([
+          getLiveNews(),
+          getHotNews(),
+          getAllNews()
+        ])
+        setLiveNews(live)
+        setHotNews(hot)
+        setAllNews(all)
+        setLastUpdate(new Date())
+      } catch (error) {
+        console.error('Failed to load news:', error)
+      } finally {
+        setLoading(false)
+        setIsLoaded(true)
+      }
+    }
+    loadNews()
   }, [])
 
   // 自动滚动实时新闻
@@ -33,10 +51,15 @@ export default function NewsPage() {
   }, [liveNews.length])
 
   // 手动刷新
-  const handleRefresh = () => {
-    setLiveNews(getLiveNews())
-    setHotNews(getHotNews())
-    setAllNews(getAllNews())
+  const handleRefresh = async () => {
+    const [live, hot, all] = await Promise.all([
+      getLiveNews(),
+      getHotNews(),
+      getAllNews()
+    ])
+    setLiveNews(live)
+    setHotNews(hot)
+    setAllNews(all)
     setLastUpdate(new Date())
   }
 
@@ -221,8 +244,18 @@ export default function NewsPage() {
         </div>
 
         {/* 新闻列表 */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredNews.map((news) => (
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
+            <p className="mt-4 text-gray-500">加载中...</p>
+          </div>
+        ) : filteredNews.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            暂无新闻数据
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredNews.map((news) => (
             <Card
               key={news.id}
               padding="none"
@@ -263,6 +296,7 @@ export default function NewsPage() {
             </Card>
           ))}
         </div>
+        )}
 
         {/* 加载更多 */}
         <div className="text-center mt-12">

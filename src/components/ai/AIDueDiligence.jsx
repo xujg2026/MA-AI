@@ -36,6 +36,11 @@ export default function AIDueDiligence({ projectId, onComplete }) {
   const [ddApiData, setDdApiData] = useState(null)
   const [expandedItems, setExpandedItems] = useState({})
   const [isCompleted, setIsCompleted] = useState(false)
+  const [customItems, setCustomItems] = useState({})
+  const [cacheStatus, setCacheStatus] = useState(null)
+  const [editingCustomItem, setEditingCustomItem] = useState(null)
+  const [editingDescription, setEditingDescription] = useState('')
+  const [uploadingFile, setUploadingFile] = useState(null)
 
   // 加载已有的阶段数据
   useEffect(() => {
@@ -69,6 +74,30 @@ export default function AIDueDiligence({ projectId, onComplete }) {
     }
 
     loadPhaseData()
+  }, [projectId])
+
+  // 加载自定义清单项
+  useEffect(() => {
+    if (!projectId) return
+
+    const loadCustomItems = async () => {
+      try {
+        const api = getApi()
+        const response = await api.getCustomItems(projectId)
+        if (response.success && response.data) {
+          const itemsMap = {}
+          response.data.forEach(item => {
+            const key = `${item.section}-${item.item_name}`
+            itemsMap[key] = item
+          })
+          setCustomItems(itemsMap)
+        }
+      } catch (error) {
+        console.error('加载自定义清单项失败:', error)
+      }
+    }
+
+    loadCustomItems()
   }, [projectId])
 
   // 保存阶段数据到项目
@@ -144,11 +173,127 @@ export default function AIDueDiligence({ projectId, onComplete }) {
     }))
   }
 
-  const addCustomItem = (section) => {
+  const addCustomItem = async (section) => {
     if (!customItem.trim()) return
-    const key = `${section}-${customItem}`
-    setCheckedItems((prev) => ({ ...prev, [key]: true }))
+    const itemName = customItem.trim()
+    const key = `${section}-${itemName}`
+
+    // 保存到后端
+    if (projectId) {
+      try {
+        const api = getApi()
+        const response = await api.saveCustomItem(projectId, {
+          section,
+          itemName,
+          description: '',
+        })
+        if (response.success && response.data) {
+          setCustomItems(prev => ({ ...prev, [key]: response.data }))
+        }
+      } catch (error) {
+        console.error('保存自定义清单项失败:', error)
+      }
+    }
+
+    setCheckedItems(prev => ({ ...prev, [key]: true }))
     setCustomItem('')
+  }
+
+  const deleteCustomItem = async (itemId) => {
+    if (!projectId) return
+    try {
+      const api = getApi()
+      const response = await api.deleteCustomItem(projectId, itemId)
+      if (response.success) {
+        setCustomItems(prev => {
+          const updated = { ...prev }
+          Object.keys(updated).forEach(key => {
+            if (updated[key].id === itemId) {
+              delete updated[key]
+            }
+          })
+          return updated
+        })
+        // 取消勾选对应的清单项
+        Object.entries(customItems).forEach(([key, item]) => {
+          if (item.id === itemId) {
+            setCheckedItems(prev => {
+              const updated = { ...prev }
+              delete updated[key]
+              return updated
+            })
+          }
+        })
+      }
+    } catch (error) {
+      console.error('删除自定义清单项失败:', error)
+    }
+  }
+
+  const toggleEditCustomItem = (itemId) => {
+    if (editingCustomItem === itemId) {
+      setEditingCustomItem(null)
+      setEditingDescription('')
+    } else {
+      setEditingCustomItem(itemId)
+      const item = Object.values(customItems).find(i => i.id === itemId)
+      setEditingDescription(item?.description || '')
+    }
+  }
+
+  const saveCustomItemDescription = async (itemId) => {
+    if (!projectId) return
+    try {
+      const api = getApi()
+      const response = await api.updateCustomItem(projectId, itemId, { description: editingDescription })
+      if (response.success && response.data) {
+        setCustomItems(prev => {
+          const updated = { ...prev }
+          Object.keys(updated).forEach(key => {
+            if (updated[key].id === itemId) {
+              updated[key] = response.data
+            }
+          })
+          return updated
+        })
+        setEditingCustomItem(null)
+      }
+    } catch (error) {
+      console.error('保存描述失败:', error)
+    }
+  }
+
+  const handleFileUpload = async (e, itemId) => {
+    const file = e.target.files?.[0]
+    if (!file || !projectId) return
+
+    setUploadingFile(itemId)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const api = getApi()
+      const response = await api.uploadCustomItemFile(projectId, itemId, formData)
+      if (response.success && response.data) {
+        setCustomItems(prev => {
+          const updated = { ...prev }
+          Object.keys(updated).forEach(key => {
+            if (updated[key].id === itemId) {
+              updated[key] = { ...updated[key], ...response.data }
+            }
+          })
+          return updated
+        })
+      }
+    } catch (error) {
+      console.error('上传文件失败:', error)
+    } finally {
+      setUploadingFile(null)
+    }
+  }
+
+  const getCustomItemFileUrl = (projId, itemId) => {
+    const api = getApi()
+    return api.getCustomItemFileUrl(projId, itemId)
   }
 
   const getProgress = (section) => {
@@ -158,8 +303,17 @@ export default function AIDueDiligence({ projectId, onComplete }) {
   }
 
   const getOverallProgress = () => {
+    // 只计算标准DD清单项，不包含自定义清单项
     const totalItems = Object.values(ddChecklist).flat().length
-    const checkedCount = Object.values(checkedItems).filter(Boolean).length
+    // 只统计标准清单项的勾选状态
+    let checkedCount = 0
+    Object.entries(ddChecklist).forEach(([section, items]) => {
+      items.forEach(item => {
+        if (checkedItems[`${section}-${item}`]) {
+          checkedCount++
+        }
+      })
+    })
     return { checked: checkedCount, total: totalItems }
   }
 
@@ -172,17 +326,110 @@ export default function AIDueDiligence({ projectId, onComplete }) {
   const progressPercent = overall.total > 0 ? Math.round((overall.checked / overall.total) * 100) : 0
 
   // 使用企查查API进行风险分析
-  const runRiskAnalysis = async () => {
+  const runRiskAnalysis = async (forceRefresh = false) => {
     if (!selectedCompany.trim()) return
 
     setIsAnalyzing(true)
     setQccError(null)
     setCompanyInfo(null)
     setAnalysisResult(null)
+    setCacheStatus(null)
 
     try {
       const api = getApi()
-      const response = await api.getQccCompanyIntelligence(selectedCompany)
+
+      // 先检查缓存（除非强制刷新）
+      if (!forceRefresh) {
+        try {
+          const cacheResponse = await api.getQccCachedData(selectedCompany)
+          if (cacheResponse.success && cacheResponse.cacheHit && cacheResponse.data && !cacheResponse.data.isExpired) {
+            console.log('使用缓存数据:', cacheResponse.data.qcc_fetch_time)
+            setCacheStatus({ hit: true, fetchTime: cacheResponse.data.qcc_fetch_time })
+
+            // 从缓存加载数据
+            const cached = cacheResponse.data.items
+            if (cached) {
+              // 直接使用缓存的公司信息构建数据
+              const companyData = cached.shareholder_info ? { ...cached } : null
+              if (companyData) {
+                setCompanyInfo({
+                  name: cached.company_name || selectedCompany,
+                  creditCode: cached.registered_capital || '-',
+                  legalPerson: cached.legal_representative || '-',
+                  registeredCapital: cached.registered_capital || '-',
+                  paidCapital: '-',
+                  status: '-',
+                  startDate: cached.establishment_date || '-',
+                  companyType: '-',
+                  scope: cached.business_scope || '-',
+                  address: '-',
+                })
+              }
+
+              // 构建API数据对象
+              const apiData = {
+                companyInfo: companyData,
+                shareholderInfo: cached.shareholder_info,
+                actualController: cached.actual_controller,
+                keyPersonnel: cached.key_personnel,
+                patentInfo: cached.patent_info,
+                trademarkInfo: cached.trademark_info,
+                caseFilingInfo: cached.business_exception,
+                softwareCopyright: cached.patent_info,
+                biddingInfo: cached.bidding_info,
+                qualifications: cached.qualifications,
+                creditEvaluation: cached.credit_evaluation,
+                recruitmentInfo: cached.raw_data?.recruitmentInfo,
+              }
+              setDdApiData(apiData)
+
+              // 自动勾选相关项目
+              const newCheckedItems = { ...checkedItems }
+              const newExpandedItems = { ...expandedItems }
+              const newExpandedSections = [...expandedSections]
+              const sectionsToExpand = new Set()
+
+              if (cached.shareholder_info) {
+                newCheckedItems['公司概况-股权结构'] = true
+                newExpandedItems['公司概况-股权结构'] = true
+                sectionsToExpand.add('公司概况')
+              }
+              if (cached.patent_info) {
+                newCheckedItems['法务-知识产权证明'] = true
+                newCheckedItems['技术-技术专利清单'] = true
+                sectionsToExpand.add('法务')
+                sectionsToExpand.add('技术')
+              }
+              if (cached.bidding_info) {
+                newCheckedItems['经营-招投标情况'] = true
+                sectionsToExpand.add('经营')
+              }
+              if (cached.qualifications) {
+                newCheckedItems['经营-资质证书'] = true
+                sectionsToExpand.add('经营')
+              }
+
+              sectionsToExpand.forEach(section => {
+                if (!newExpandedSections.includes(section)) {
+                  newExpandedSections.push(section)
+                }
+              })
+
+              setCheckedItems(newCheckedItems)
+              setExpandedItems(newExpandedItems)
+              setExpandedSections(newExpandedSections)
+
+              setIsAnalyzing(false)
+              return
+            }
+          }
+        } catch (cacheError) {
+          console.error('检查缓存失败:', cacheError)
+        }
+      }
+
+      // 缓存不存在或forceRefresh，调用API获取新数据
+      const response = await api.getQccCompanyIntelligence(selectedCompany, forceRefresh)
 
       if (!response.success || !response.data) {
         throw new Error(response.error || '企查查数据获取失败')
@@ -694,7 +941,7 @@ export default function AIDueDiligence({ projectId, onComplete }) {
             <Button
               variant="primary"
               icon={isAnalyzing ? Loader2 : Eye}
-              onClick={runRiskAnalysis}
+              onClick={() => runRiskAnalysis(false)}
               disabled={!selectedCompany || isAnalyzing}
             >
               {isAnalyzing ? (
@@ -706,9 +953,25 @@ export default function AIDueDiligence({ projectId, onComplete }) {
                 '启动AI风险扫描'
               )}
             </Button>
+            {cacheStatus?.hit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => runRiskAnalysis(true)}
+                title="使用缓存数据，点击强制刷新"
+              >
+                强制刷新
+              </Button>
+            )}
             {qccError && (
               <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded-lg">
                 {qccError}
+              </p>
+            )}
+            {cacheStatus?.hit && (
+              <p className="text-xs text-green-600 bg-green-50 p-2 rounded-lg flex items-center gap-1">
+                <CheckCircle size={12} />
+                使用缓存数据 ({new Date(cacheStatus.fetchTime).toLocaleString()})
               </p>
             )}
           </div>
@@ -1318,20 +1581,31 @@ export default function AIDueDiligence({ projectId, onComplete }) {
                       return (
                         <div key={item} className="space-y-1">
                           <div className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50">
-                            <input
-                              type="checkbox"
-                              checked={isChecked || false}
-                              onChange={() => toggleItem(section, item)}
-                              className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
-                            />
-                            {isChecked ? (
-                              <CheckCircle size={18} className="text-green-500" />
+                            {hasApiData ? (
+                              <>
+                                <CheckCircle size={18} className="text-green-500" />
+                                <span className="text-sm flex-1 text-green-600 font-medium">
+                                  {item}
+                                </span>
+                              </>
                             ) : (
-                              <Circle size={18} className="text-gray-300" />
+                              <>
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked || false}
+                                  onChange={() => toggleItem(section, item)}
+                                  className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                                />
+                                {isChecked ? (
+                                  <CheckCircle size={18} className="text-green-500" />
+                                ) : (
+                                  <Circle size={18} className="text-gray-300" />
+                                )}
+                                <span className={`text-sm flex-1 ${isChecked ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
+                                  {item}
+                                </span>
+                              </>
                             )}
-                            <span className={`text-sm flex-1 ${isChecked ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
-                              {item}
-                            </span>
                             {hasApiData && (
                               <button
                                 onClick={() => toggleItemDetail(section, item)}
@@ -1365,6 +1639,81 @@ export default function AIDueDiligence({ projectId, onComplete }) {
                         添加
                       </Button>
                     </div>
+                    {/* Custom Items List */}
+                    {Object.entries(customItems)
+                      .filter(([key]) => key.startsWith(`${section}-`))
+                      .map(([key, item]) => (
+                        <div key={key} className="mt-2 p-2 bg-gray-50 rounded-lg text-sm">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle size={14} className="text-green-500" />
+                              <span>{item.item_name}</span>
+                              {item.file_name && (
+                                <Badge variant="info" className="text-xs">{item.file_name}</Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => toggleEditCustomItem(item.id)}
+                                className="text-xs text-primary hover:underline"
+                              >
+                                {editingCustomItem === item.id ? '收起' : '编辑'}
+                              </button>
+                              <button
+                                onClick={() => deleteCustomItem(item.id)}
+                                className="text-xs text-red-500 hover:text-red-700"
+                              >
+                                删除
+                              </button>
+                            </div>
+                          </div>
+                          {item.description && !editingCustomItem && (
+                            <p className="text-xs text-gray-500 mt-1">{item.description}</p>
+                          )}
+                          {/* Inline Edit Form */}
+                          {editingCustomItem === item.id && (
+                            <div className="mt-2 space-y-2">
+                              <textarea
+                                value={editingDescription}
+                                onChange={(e) => setEditingDescription(e.target.value)}
+                                placeholder="输入描述信息..."
+                                className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:ring-1 focus:ring-primary outline-none"
+                                rows={2}
+                              />
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="file"
+                                  id={`file-upload-${item.id}`}
+                                  onChange={(e) => handleFileUpload(e, item.id)}
+                                  className="hidden"
+                                />
+                                <label
+                                  htmlFor={`file-upload-${item.id}`}
+                                  className="text-xs text-primary cursor-pointer hover:underline"
+                                >
+                                  {uploadingFile === item.id ? '上传中...' : (item.file_name ? '更换文件' : '上传文件')}
+                                </label>
+                                {item.file_name && (
+                                  <a
+                                    href={getCustomItemFileUrl(projectId, item.id)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-gray-500 hover:underline"
+                                  >
+                                    查看文件
+                                  </a>
+                                )}
+                                <button
+                                  onClick={() => saveCustomItemDescription(item.id)}
+                                  className="text-xs bg-primary text-white px-2 py-1 rounded hover:bg-primary/90"
+                                >
+                                  保存
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                   </div>
                 </div>
               )}

@@ -121,6 +121,17 @@ curl http://localhost:3001/api/qcc/status
 
 若返回 `configured: false`，说明 QCC 相关功能当前不可用。
 
+### 7.3 新闻资讯
+
+新闻模块依赖 `rss-parser` 和 `node-html-parser`。后端独立启动时会自动初始化默认新闻源。
+
+若配置 `VITE_USE_REAL_NEWS=true`，前端资讯页使用真实后端；否则使用 mock fallback 数据。
+
+```bash
+# 检查新闻数据库状态
+curl http://localhost:3001/api/news/health
+```
+
 ## 8. 常见问题
 
 ### 前端请求不到后端

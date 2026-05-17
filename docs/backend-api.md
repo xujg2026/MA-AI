@@ -319,7 +319,100 @@ Query 参数：
 | page | number | 页码，默认1 |
 | pageSize | number | 每页条数，默认20 |
 
-## 10. 项目管理
+## 10. 新闻与资讯
+
+### 10.1 新闻健康检查
+
+`GET /api/news/health`
+
+返回：
+```json
+{
+  "status": "ok",
+  "db": "ok",
+  "article_count": 1234,
+  "tic_count": 567,
+  "ma_count": 89,
+  "unanalyzed_count": 234
+}
+```
+
+### 10.2 实时快讯
+
+`GET /api/news/live`
+
+返回：
+```json
+{
+  "success": true,
+  "data": [
+    { "id": 1, "title": "华测检测拟收购某环境检测公司100%股权", "category": "并购", "hot": true, "sentiment": "positive", "time": "刚刚", "views": 1234 }
+  ]
+}
+```
+
+### 10.3 热门文章
+
+`GET /api/news/hot`
+
+Query 参数：`limit` 可选，默认 10
+
+返回：同 10.2 结构
+
+### 10.4 所有/筛选文章
+
+`GET /api/news/all`
+
+Query 参数：
+
+- `page` 页码，默认 1
+- `pageSize` 每页条数，默认 20
+- `category` 分类筛选
+- `tic` `true` 时只返回 TIC 相关文章
+
+返回：
+```json
+{
+  "success": true,
+  "data": [{ "id": 1, "title": "...", "body": "...", "category": "并购", "date": "2024-03-15", "hot": true, "views": 1234, "is_tic": true, "is_ma": true, "sentiment": "positive" }],
+  "pagination": { "page": 1, "pageSize": 20, "total": 100, "totalPages": 5 }
+}
+```
+
+### 10.5 市场数据
+
+`GET /api/news/stats`
+
+返回统计数据数组，包含标签、数值、涨跌幅、方向、图标。
+
+### 10.6 新闻源管理
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/news/feeds` | 获取新闻源列表 |
+| POST | `/api/news/feeds` | 添加新闻源 |
+| PUT | `/api/news/feeds/:id` | 更新新闻源 |
+| DELETE | `/api/news/feeds/:id` | 删除新闻源 |
+
+### 10.7 手动触发
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/news/collect` | 手动触发新闻采集 |
+| POST | `/api/news/analyze` | 手动触发 AI 分析 |
+
+### 10.8 自定义清单项
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/dd-custom-items/:id/custom-items` | 获取项目的自定义清单项 |
+| POST | `/api/dd-custom-items/:id/custom-items` | 创建自定义清单项 |
+| PUT | `/api/dd-custom-items/:id/custom-items/:itemId` | 更新清单项 |
+| DELETE | `/api/dd-custom-items/:id/custom-items/:itemId` | 删除清单项 |
+| POST | `/api/dd-custom-items/:id/custom-items/:itemId/upload` | 上传文件 |
+| GET | `/api/dd-custom-items/:id/custom-items/:itemId/file` | 下载文件 |
+
+## 11. 项目管理
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -332,7 +425,7 @@ Query 参数：
 | PUT | `/api/projects/:id/phases` | 更新项目阶段 |
 | POST | `/api/imports/excel` | Excel 批量导入项目 |
 
-## 11. 前端对接位置
+## 12. 前端对接位置
 
 当前前端 API 包装集中在：
 

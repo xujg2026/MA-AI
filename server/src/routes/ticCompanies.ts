@@ -39,6 +39,7 @@ ticCompaniesRouter.get('/', (req, res) => {
       companyType,
       employeeCountMin,
       employeeCountMax,
+      registeredCapitalMin,
       hasPhone,
       hasWebsite,
       businessScope,
@@ -60,6 +61,7 @@ ticCompaniesRouter.get('/', (req, res) => {
     if (companyType) filters.companyType = companyType as string
     if (employeeCountMin) filters.employeeCountMin = parseInt(employeeCountMin as string, 10)
     if (employeeCountMax) filters.employeeCountMax = parseInt(employeeCountMax as string, 10)
+    if (registeredCapitalMin) filters.registeredCapitalMin = parseInt(registeredCapitalMin as string, 10)
     if (hasPhone) filters.hasPhone = hasPhone as string
     if (hasWebsite) filters.hasWebsite = hasWebsite as string
     if (businessScope) filters.businessScope = businessScope as string
