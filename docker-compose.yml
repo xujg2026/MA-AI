@@ -30,6 +30,8 @@ services:
       - QCC_API_SECRET=${QCC_API_SECRET:-}
       - NEWS_COLLECTION_INTERVAL=${NEWS_COLLECTION_INTERVAL:-5}
       - NEWS_ANALYSIS_INTERVAL=${NEWS_ANALYSIS_INTERVAL:-60}
+    volumes:
+      - ./Source:/app/Source:ro
     ports:
       - "3001:3001"
     restart: unless-stopped
