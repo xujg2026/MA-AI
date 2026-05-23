@@ -2,6 +2,14 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Install Python and pip for akshare
+RUN apk add --no-cache python3 py3-pip && \
+    python3 -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir akshare
+
+# Set PATH to include virtual environment
+ENV PATH="/opt/venv/bin:$PATH"
+
 # Copy package files
 COPY server/package*.json ./
 
