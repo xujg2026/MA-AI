@@ -2,10 +2,13 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Use Aliyun mirrors for faster download in China
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+
 # Install Python and pip for akshare
 RUN apk add --no-cache python3 py3-pip && \
     python3 -m venv /opt/venv && \
-    /opt/venv/bin/pip install --no-cache-dir akshare
+    /opt/venv/bin/pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com akshare
 
 # Set PATH to include virtual environment
 ENV PATH="/opt/venv/bin:$PATH"
