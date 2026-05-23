@@ -49,8 +49,17 @@ class ApiService {
 
     try {
       const response = await fetch(url, options)
-      const data = await response.json()
-      return data
+      const text = await response.text()
+      if (!text) {
+        return { success: false, error: '服务器返回空响应' }
+      }
+      try {
+        const data = JSON.parse(text)
+        return data
+      } catch (parseError) {
+        console.error(`[API] JSON解析失败 [${method}] ${url}:`, parseError, 'Response:', text)
+        return { success: false, error: '服务器响应格式错误' }
+      }
     } catch (error) {
       console.error(`[API] 请求失败 [${method}] ${url}:`, error)
       return {
