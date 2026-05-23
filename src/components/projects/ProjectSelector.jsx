@@ -85,7 +85,7 @@ export default function ProjectSelector({ isOpen, onClose, deal, onSuccess }) {
         industry: deal?.industry,
         region: deal?.region,
         estimatedValue: deal?.amount,
-        finderResult: {
+        finder_results: {
           matchScore: deal?.matchScore,
           matchCount: deal?.matchScore ? 1 : 0,
           topMatches: [deal],
