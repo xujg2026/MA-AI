@@ -16,7 +16,7 @@ const __dirname = path.dirname(__filename)
 import { initTicCompanyDb, batchInsertTicCompanies, isTicCompanyTableEmpty, getTicCompanyCount, truncateTicCompanies } from '../utils/ticCompanyDb.js'
 
 // Excel 文件路径 - 使用相对路径（兼容 Windows 和 Linux）
-const EXCEL_FILE = path.join(__dirname, '../../../Source/TIC company info.xlsx')
+const EXCEL_FILE = path.join(__dirname, '../../Source/TIC company info.xlsx')
 
 // 字段映射
 const FIELD_MAP: Record<string, string> = {
