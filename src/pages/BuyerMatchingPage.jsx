@@ -33,6 +33,7 @@ export default function BuyerMatchingPage() {
   })
   const [isLoaded, setIsLoaded] = useState(false)
   const [selectedProjectId, setSelectedProjectId] = useState(projectId || '')
+  const currentProject = projects.find(p => p.id === selectedProjectId)
 
   useEffect(() => {
     setIsLoaded(true)
@@ -82,7 +83,7 @@ export default function BuyerMatchingPage() {
       case 'protocol':
         return <AIProtocolSigning projectId={selectedProjectId} onComplete={() => markComplete('protocol')} />
       case 'due-diligence':
-        return <AIDueDiligence projectId={selectedProjectId} onComplete={() => markComplete('due-diligence')} />
+        return <AIDueDiligence projectId={selectedProjectId} onComplete={() => markComplete('due-diligence')} companyName={currentProject?.company_name || ''} />
       case 'valuation':
         return <AIValuation projectId={selectedProjectId} onComplete={() => markComplete('valuation')} />
       case 'match':

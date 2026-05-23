@@ -23,7 +23,7 @@ import {
 } from 'lucide-react'
 import { Card, Button, Badge } from '../ui'
 
-export default function AIDueDiligence({ projectId, onComplete }) {
+export default function AIDueDiligence({ projectId, onComplete, companyName: projectCompanyName }) {
   const [expandedSections, setExpandedSections] = useState(['法务', '技术'])
   const [checkedItems, setCheckedItems] = useState({})
   const [customItem, setCustomItem] = useState('')
@@ -56,15 +56,33 @@ export default function AIDueDiligence({ projectId, onComplete }) {
             const outputData = typeof ddPhase.output_data === 'string'
               ? JSON.parse(ddPhase.output_data)
               : ddPhase.output_data
+            let loadedCheckedCount = 0
             if (outputData.checkedItems) {
               const loadedChecked = {}
               outputData.checkedItems.forEach(key => {
                 loadedChecked[key] = true
               })
               setCheckedItems(loadedChecked)
+              loadedCheckedCount = outputData.checkedItems.length
             }
             if (outputData.completedAt) {
               setIsCompleted(true)
+            }
+            if (outputData.ddApiData) {
+              setDdApiData(outputData.ddApiData)
+            }
+            if (outputData.analysisResult) {
+              setAnalysisResult(outputData.analysisResult)
+            }
+            // 恢复公司名称，若无 ddApiData 但有已勾选项目则自动从缓存加载
+            const savedCompany = outputData.selectedCompany || ''
+            if (savedCompany) {
+              setSelectedCompany(savedCompany)
+              if (!outputData.ddApiData && loadedCheckedCount > 0) {
+                setTimeout(() => {
+                  runRiskAnalysis(false, savedCompany)
+                }, 0)
+              }
             }
           }
         }
@@ -75,6 +93,13 @@ export default function AIDueDiligence({ projectId, onComplete }) {
 
     loadPhaseData()
   }, [projectId])
+
+  // 自动设置目标公司名称（复用项目公司名称）
+  useEffect(() => {
+    if (projectCompanyName && !selectedCompany) {
+      setSelectedCompany(projectCompanyName)
+    }
+  }, [projectCompanyName])
 
   // 加载自定义清单项
   useEffect(() => {
@@ -127,6 +152,8 @@ export default function AIDueDiligence({ projectId, onComplete }) {
         criticalRisks: analysisResult.qccData?.criticalRisks,
         highRisks: analysisResult.qccData?.highRisks,
       } : null,
+      ddApiData: ddApiData || null,
+      selectedCompany: selectedCompany || '',
     }
     await savePhaseData(outputData)
     onComplete()
@@ -326,8 +353,9 @@ export default function AIDueDiligence({ projectId, onComplete }) {
   const progressPercent = overall.total > 0 ? Math.round((overall.checked / overall.total) * 100) : 0
 
   // 使用企查查API进行风险分析
-  const runRiskAnalysis = async (forceRefresh = false) => {
-    if (!selectedCompany.trim()) return
+  const runRiskAnalysis = async (forceRefresh = false, companyNameOverride = null) => {
+    const companyName = companyNameOverride || selectedCompany
+    if (!companyName.trim()) return
 
     setIsAnalyzing(true)
     setQccError(null)
@@ -341,7 +369,7 @@ export default function AIDueDiligence({ projectId, onComplete }) {
       // 先检查缓存（除非强制刷新）
       if (!forceRefresh) {
         try {
-          const cacheResponse = await api.getQccCachedData(selectedCompany)
+          const cacheResponse = await api.getQccCachedData(companyName)
           if (cacheResponse.success && cacheResponse.cacheHit && cacheResponse.data && !cacheResponse.data.isExpired) {
             console.log('使用缓存数据:', cacheResponse.data.qcc_fetch_time)
             setCacheStatus({ hit: true, fetchTime: cacheResponse.data.qcc_fetch_time })
@@ -349,22 +377,31 @@ export default function AIDueDiligence({ projectId, onComplete }) {
             // 从缓存加载数据
             const cached = cacheResponse.data.items
             if (cached) {
-              // 直接使用缓存的公司信息构建数据
-              const companyData = cached.shareholder_info ? { ...cached } : null
-              if (companyData) {
-                setCompanyInfo({
-                  name: cached.company_name || selectedCompany,
-                  creditCode: cached.registered_capital || '-',
-                  legalPerson: cached.legal_representative || '-',
-                  registeredCapital: cached.registered_capital || '-',
-                  paidCapital: '-',
-                  status: '-',
-                  startDate: cached.establishment_date || '-',
-                  companyType: '-',
-                  scope: cached.business_scope || '-',
-                  address: '-',
-                })
+              // 构建渲染所需格式的公司基本信息（中文字段名）
+              const companyData = {
+                企业名称: cached.company_name || companyName,
+                统一社会信用代码: cached.credit_code || '-',
+                法定代表人: cached.legal_representative || '-',
+                注册资本: cached.registered_capital || '-',
+                实缴资本: '-',
+                登记状态: cached.status || '-',
+                成立日期: cached.establishment_date || '-',
+                企业类型: cached.company_type || '-',
+                经营范围: cached.business_scope || '-',
+                注册地址: cached.address || '-',
               }
+              setCompanyInfo({
+                name: cached.company_name || companyName,
+                creditCode: cached.credit_code || '-',
+                legalPerson: cached.legal_representative || '-',
+                registeredCapital: cached.registered_capital || '-',
+                paidCapital: '-',
+                status: cached.status || '-',
+                startDate: cached.establishment_date || '-',
+                companyType: cached.company_type || '-',
+                scope: cached.business_scope || '-',
+                address: cached.address || '-',
+              })
 
               // 构建API数据对象
               const apiData = {
@@ -389,6 +426,11 @@ export default function AIDueDiligence({ projectId, onComplete }) {
               const newExpandedSections = [...expandedSections]
               const sectionsToExpand = new Set()
 
+              if (cached.company_name || cached.establishment_date) {
+                newCheckedItems['公司概况-公司基本信息'] = true
+                newExpandedItems['公司概况-公司基本信息'] = true
+                sectionsToExpand.add('公司概况')
+              }
               if (cached.shareholder_info) {
                 newCheckedItems['公司概况-股权结构'] = true
                 newExpandedItems['公司概况-股权结构'] = true
@@ -399,6 +441,10 @@ export default function AIDueDiligence({ projectId, onComplete }) {
                 newCheckedItems['技术-技术专利清单'] = true
                 sectionsToExpand.add('法务')
                 sectionsToExpand.add('技术')
+              }
+              if (cached.business_exception) {
+                newCheckedItems['法务-诉讼记录'] = true
+                sectionsToExpand.add('法务')
               }
               if (cached.bidding_info) {
                 newCheckedItems['经营-招投标情况'] = true
@@ -419,6 +465,54 @@ export default function AIDueDiligence({ projectId, onComplete }) {
               setExpandedItems(newExpandedItems)
               setExpandedSections(newExpandedSections)
 
+              // 基于缓存数据计算风险分析结果
+              const criticalRisks = []
+              const highRisks = []
+
+              const dishonestData = cached.dishonest_info
+              if (dishonestData && dishonestData.搜索结果 && !dishonestData.搜索结果.includes('未发现任何')) {
+                criticalRisks.push({ type: '失信记录', count: 1 })
+              }
+              if (cached.business_exception && cached.business_exception.搜索结果 && !cached.business_exception.搜索结果.includes('未发现任何')) {
+                criticalRisks.push({ type: '经营异常', count: 1 })
+              }
+
+              const caseCount = cached.case_info?.立案信息?.length || 0
+              if (caseCount > 0) {
+                highRisks.push({ type: '立案信息', count: caseCount })
+              }
+
+              let overall = 85
+              if (criticalRisks.length > 0) overall -= criticalRisks.length * 15
+              if (highRisks.length > 0) overall -= highRisks.length * 8
+              overall = Math.max(0, Math.min(100, overall))
+
+              const patentCount = cached.patent_info?.专利信息?.length || 0
+              const trademarkCount = cached.trademark_info?.商标信息?.length || 0
+              const biddingCount = cached.bidding_info?.招投标信息?.length || 0
+              const qualificationCount = cached.qualifications?.资质证书信息?.length || 0
+              const shareholderCount = cached.shareholder_info?.股东信息?.length || 0
+
+              const heatMapData = [
+                { area: '合规风险', score: criticalRisks.length === 0 && highRisks.length === 0 ? 95 : overall, status: criticalRisks.length === 0 && highRisks.length === 0 ? 'low' : 'high', trend: criticalRisks.length === 0 ? '+0%' : `-${criticalRisks.length * 15}%` },
+                { area: '法律风险', score: caseCount === 0 ? 90 : Math.max(40, 90 - caseCount * 2), status: caseCount === 0 ? 'low' : caseCount < 10 ? 'medium' : 'high', trend: caseCount === 0 ? '+0%' : `+${caseCount}起` },
+                { area: '知识产权', score: patentCount > 10000 ? 95 : patentCount > 1000 ? 85 : 70, status: patentCount > 1000 ? 'low' : patentCount > 100 ? 'medium' : 'high', trend: `+${patentCount}件` },
+                { area: '经营活跃', score: biddingCount > 1000 ? 90 : biddingCount > 100 ? 75 : 60, status: biddingCount > 100 ? 'low' : 'medium', trend: `+${biddingCount}次` },
+                { area: '团队稳定', score: shareholderCount > 5 ? 80 : 85, status: 'low', trend: '+0%' },
+                { area: '资质齐全', score: qualificationCount > 100 ? 95 : qualificationCount > 10 ? 85 : 70, status: qualificationCount > 10 ? 'low' : 'medium', trend: `+${qualificationCount}个` },
+              ]
+
+              const riskResult = {
+                overall,
+                financial: { score: overall + 5, risks: ['需结合财务报表分析'] },
+                legal: { score: overall - 5, risks: [...criticalRisks.map(r => `${r.type}(${r.count}条)`), ...highRisks.map(r => `${r.type}(${r.count}条)`)] },
+                business: { score: overall + 3, risks: ['需结合业务尽调分析'] },
+                compliance: { score: overall + 8, risks: criticalRisks.length === 0 && highRisks.length === 0 ? ['未发现明显合规问题'] : [] },
+                heatMap: heatMapData,
+                qccData: { criticalRisks, highRisks, totalLawsuits: caseCount, totalPenalties: 0, businessExceptions: criticalRisks.some(r => r.type === '经营异常') ? 1 : 0, shareholderInfo: cached.shareholder_info, actualController: cached.actual_controller, patentCount, trademarkCount, biddingCount, qualificationCount },
+              }
+              setAnalysisResult(riskResult)
+
               setIsAnalyzing(false)
               return
             }
@@ -429,7 +523,7 @@ export default function AIDueDiligence({ projectId, onComplete }) {
       }
 
       // 缓存不存在或forceRefresh，调用API获取新数据
-      const response = await api.getQccCompanyIntelligence(selectedCompany, forceRefresh)
+      const response = await api.getQccCompanyIntelligence(companyName, forceRefresh)
 
       if (!response.success || !response.data) {
         throw new Error(response.error || '企查查数据获取失败')
@@ -445,7 +539,7 @@ export default function AIDueDiligence({ projectId, onComplete }) {
       const companyData = allData.companyInfo
       if (companyData && !companyData.error) {
         const basicInfo = {
-          name: companyData.企业名称 || selectedCompany,
+          name: companyData.企业名称 || companyName,
           creditCode: companyData.统一社会信用代码 || '-',
           legalPerson: companyData.法定代表人 || '-',
           registeredCapital: companyData.注册资本 || '-',
@@ -928,15 +1022,11 @@ export default function AIDueDiligence({ projectId, onComplete }) {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                输入目标公司名称
+                目标公司
               </label>
-              <input
-                type="text"
-                value={selectedCompany}
-                onChange={(e) => setSelectedCompany(e.target.value)}
-                placeholder="例如：北京智云科技有限公司"
-                className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none bg-white"
-              />
+              <div className="w-full px-4 py-2 border border-gray-200 rounded-xl bg-gray-50 text-gray-700">
+                {selectedCompany || '未指定公司'}
+              </div>
             </div>
             <Button
               variant="primary"
