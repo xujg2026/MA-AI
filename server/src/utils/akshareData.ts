@@ -462,6 +462,7 @@ ${announcementTexts}
           ],
           temperature: 0,
           max_tokens: 500,
+          enable_thinking: false,
         }),
         signal: controller.signal,
       })

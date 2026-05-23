@@ -123,6 +123,7 @@ async function callOpenAIAPI(prompt: string, config: any): Promise<string> {
           ],
           temperature: config.temperature,
           max_tokens: config.maxTokens,
+          enable_thinking: false,
         }),
         signal: controller.signal,
       })
